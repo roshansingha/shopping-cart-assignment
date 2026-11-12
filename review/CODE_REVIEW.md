@@ -3,7 +3,7 @@
 **PR:** "Add cart summary widget" (a fictional PR for this exercise)
 **Files under review:** [`examples/cart-summary.before.tsx`](examples/cart-summary.before.tsx)
 **Proposed refactor:** [`examples/cart-summary.after.tsx`](examples/cart-summary.after.tsx)
-**Evidence:** [`examples/cart-summary.test.tsx`](examples/cart-summary.test.tsx) (run with `corepack pnpm vitest run review`)
+**Evidence:** [`examples/cart-summary.test.tsx`](examples/cart-summary.test.tsx) (run with `pnpm vitest run review`)
 
 **Verdict: request changes.** Nice, readable first pass, and the demo works. But there are five problems that only show up under real usage. Three should block the merge (1, 2, 3), two I'd like fixed in this PR (4, 5). I wrote a refactor and a test file so you can see each problem fail rather than take my word for it.
 

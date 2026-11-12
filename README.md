@@ -14,7 +14,7 @@ pnpm install
 pnpm dev            # http://localhost:3000
 ```
 
-If `pnpm` is not on your PATH, either run `corepack enable` once, or prefix every command below with `corepack`, for example `corepack pnpm dev`.
+If your shell says `pnpm: command not found`, install it once with `corepack enable` (add `sudo` if you get a permissions error) or `npm install -g pnpm`.
 
 | Command                        | What it does                                                                         |
 | ------------------------------ | ------------------------------------------------------------------------------------ |

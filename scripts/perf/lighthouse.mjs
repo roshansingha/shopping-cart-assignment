@@ -30,7 +30,7 @@ for (const form of forms) {
       `--throttling-method=${throttling}`,
     ];
     if (form === "desktop") args.push("--preset=desktop");
-    execFileSync("corepack", ["pnpm", ...args], { stdio: "pipe", timeout: 180000 });
+    execFileSync("pnpm", args, { stdio: "pipe", timeout: 180000 });
     const r = JSON.parse(readFileSync(file, "utf8"));
     const a = r.audits;
     samples.push({

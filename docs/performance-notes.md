@@ -26,8 +26,8 @@ Reproduce:
 
 ```bash
 node e2e/mock-api.ts &                                   # mock API on :4010
-PRODUCTS_API_URL=http://localhost:4010/products corepack pnpm build
-PRODUCTS_API_URL=http://localhost:4010/products corepack pnpm start -p 3100 &
+PRODUCTS_API_URL=http://localhost:4010/products pnpm build
+PRODUCTS_API_URL=http://localhost:4010/products pnpm start -p 3100 &
 node scripts/perf/measure.mjs                            # page weight
 node scripts/perf/lighthouse.mjs my-label                # Lighthouse, writes docs/perf/my-label-lighthouse.json
 LH_THROTTLING=devtools LH_FORMS=mobile node scripts/perf/lighthouse.mjs my-label-applied
