@@ -13,9 +13,11 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "coverage/**",
-    ".next-e2e/**",
+    ".next-*/**",
     "playwright-report/**",
     "test-results/**",
+    // Deliberately flawed code for the review exercise (review/CODE_REVIEW.md).
+    "review/examples/*.before.tsx",
   ]),
 ]);
 

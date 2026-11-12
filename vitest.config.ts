@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     environment: "node", // logic tests; component tests opt in with // @vitest-environment jsdom
     setupFiles: ["src/test/setup.tsx"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "review/**/*.test.tsx"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
