@@ -7,7 +7,7 @@ export const rawProducts = Array.from({ length: 10 }, (_, i) => {
     price: id === 1 ? 109.95 : id * 10,
     description: `Description ${id}`,
     category: id <= 6 ? "gadgets" : "clothing",
-    image: "https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg",
+    image: "https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_t.png",
     rating: { rate: 1 + (id % 5), count: 10 * id },
   };
 });

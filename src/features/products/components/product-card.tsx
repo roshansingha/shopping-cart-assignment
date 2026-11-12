@@ -3,7 +3,17 @@ import { QuantityStepper } from "@/features/cart/components/quantity-stepper";
 import { formatCents } from "@/shared/money";
 import type { Product } from "../schema";
 
-export function ProductCard({ product }: { product: Product }) {
+/** `preload` is for above-the-fold cards: the first image is the page's LCP element. */
+export function ProductCard({
+  product,
+  preload = false,
+  highPriority = false,
+}: {
+  product: Product;
+  preload?: boolean;
+  /** Only the single LCP candidate: marking many images high priority makes them compete. */
+  highPriority?: boolean;
+}) {
   return (
     <li className="flex flex-col rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="relative mb-3 aspect-square w-full">
@@ -11,6 +21,8 @@ export function ProductCard({ product }: { product: Product }) {
           src={product.image}
           alt=""
           fill
+          preload={preload}
+          fetchPriority={highPriority ? "high" : undefined}
           sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           className="object-contain"
         />

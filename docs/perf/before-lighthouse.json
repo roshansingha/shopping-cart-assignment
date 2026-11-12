@@ -1,0 +1,116 @@
+{
+  "mobile": {
+    "runs": 3,
+    "median": {
+      "performance": 99,
+      "accessibility": 100,
+      "bestPractices": 96,
+      "fcpMs": 761,
+      "lcpMs": 761,
+      "tbtMs": 109,
+      "cls": 0,
+      "speedIndexMs": 1274,
+      "transferKB": 249
+    },
+    "lcpElement": null,
+    "lcpLazyLoaded": false,
+    "samples": [
+      {
+        "performance": 99,
+        "accessibility": 100,
+        "bestPractices": 96,
+        "fcpMs": 769,
+        "lcpMs": 769,
+        "tbtMs": 109,
+        "cls": 0,
+        "speedIndexMs": 1274,
+        "transferKB": 249,
+        "lcpElement": null,
+        "lcpLazyLoaded": false
+      },
+      {
+        "performance": 100,
+        "accessibility": 100,
+        "bestPractices": 96,
+        "fcpMs": 761,
+        "lcpMs": 761,
+        "tbtMs": 24,
+        "cls": 0,
+        "speedIndexMs": 761,
+        "transferKB": 249,
+        "lcpElement": null,
+        "lcpLazyLoaded": false
+      },
+      {
+        "performance": 95,
+        "accessibility": 100,
+        "bestPractices": 96,
+        "fcpMs": 761,
+        "lcpMs": 761,
+        "tbtMs": 253,
+        "cls": 0,
+        "speedIndexMs": 1289,
+        "transferKB": 249,
+        "lcpElement": null,
+        "lcpLazyLoaded": false
+      }
+    ]
+  },
+  "desktop": {
+    "runs": 3,
+    "median": {
+      "performance": 100,
+      "accessibility": 100,
+      "bestPractices": 96,
+      "fcpMs": 208,
+      "lcpMs": 208,
+      "tbtMs": 0,
+      "cls": 0,
+      "speedIndexMs": 304,
+      "transferKB": 249
+    },
+    "lcpElement": null,
+    "lcpLazyLoaded": false,
+    "samples": [
+      {
+        "performance": 100,
+        "accessibility": 100,
+        "bestPractices": 96,
+        "fcpMs": 215,
+        "lcpMs": 215,
+        "tbtMs": 0,
+        "cls": 0,
+        "speedIndexMs": 304,
+        "transferKB": 249,
+        "lcpElement": null,
+        "lcpLazyLoaded": false
+      },
+      {
+        "performance": 100,
+        "accessibility": 100,
+        "bestPractices": 96,
+        "fcpMs": 202,
+        "lcpMs": 202,
+        "tbtMs": 0,
+        "cls": 0,
+        "speedIndexMs": 202,
+        "transferKB": 249,
+        "lcpElement": null,
+        "lcpLazyLoaded": false
+      },
+      {
+        "performance": 100,
+        "accessibility": 100,
+        "bestPractices": 96,
+        "fcpMs": 208,
+        "lcpMs": 208,
+        "tbtMs": 0,
+        "cls": 0,
+        "speedIndexMs": 361,
+        "transferKB": 249,
+        "lcpElement": null,
+        "lcpLazyLoaded": false
+      }
+    ]
+  }
+}

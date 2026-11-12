@@ -16,14 +16,20 @@ vi.mock("next/navigation", async () => {
 });
 vi.mock("next/image", () => ({
   default: (
-    props: ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; priority?: boolean },
+    props: ImgHTMLAttributes<HTMLImageElement> & {
+      fill?: boolean;
+      priority?: boolean;
+      preload?: boolean;
+    },
   ) => {
     // Keep only real <img> attributes; next/image-only props must not reach the DOM.
-    const { fill, priority, ...img } = props;
+    const { fill, priority, preload, ...img } = props;
     void fill;
     void priority;
+    void preload;
+    // Expose preload so tests can assert which images are treated as above-the-fold.
     // eslint-disable-next-line @next/next/no-img-element
-    return <img {...img} alt={img.alt ?? ""} />;
+    return <img {...img} alt={img.alt ?? ""} data-preload={preload ? "true" : "false"} />;
   },
 }));
 
@@ -34,6 +40,7 @@ if (typeof HTMLDialogElement !== "undefined") {
   };
   HTMLDialogElement.prototype.close = function () {
     this.removeAttribute("open");
+    this.dispatchEvent(new Event("close")); // real dialogs fire this; the drawer relies on it
   };
 }
 

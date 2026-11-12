@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Suspense } from "react";
 import { CartHydrator } from "@/features/cart/components/cart-hydrator";
 import { CartLiveRegion } from "@/features/cart/components/live-region";
-import { SiteHeader, SiteHeaderFallback } from "./site-header";
+import { SiteHeader } from "./site-header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,9 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to main content
         </a>
         <CartHydrator />
-        <Suspense fallback={<SiteHeaderFallback />}>
-          <SiteHeader />
-        </Suspense>
+        <SiteHeader />
         <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
           {children}
         </main>

@@ -121,3 +121,18 @@ describe("safeLocalStorage", () => {
     }
   });
 });
+
+describe("tampered storage size", () => {
+  it("rejects a cart with an absurd number of lines", async () => {
+    const lines = Array.from({ length: 5000 }, (_, i) => ({ productId: i + 1, quantity: 1 }));
+    const s = createCartStore(memoryStorage({ [STORAGE_KEY]: stored(lines) }));
+    await s.persist.rehydrate();
+    expect(s.getState().lines).toEqual([]);
+  });
+  it("accepts a cart at the line limit", async () => {
+    const lines = Array.from({ length: 100 }, (_, i) => ({ productId: i + 1, quantity: 1 }));
+    const s = createCartStore(memoryStorage({ [STORAGE_KEY]: stored(lines) }));
+    await s.persist.rehydrate();
+    expect(s.getState().lines).toHaveLength(100);
+  });
+});
