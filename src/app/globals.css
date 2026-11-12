@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Visible keyboard focus everywhere (blue ring, lighter blue in dark mode). */
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :focus-visible {
+    outline-color: #60a5fa;
+  }
+}
+
+/* Skip link: hidden until focused, then pinned top-left. */
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -4rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  background: #171717;
+  color: #ffffff;
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+/* A modal <dialog> does not lock page scroll by itself. */
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
+/* main is a programmatic focus target for the skip link; no ring needed on it. */
+main:focus {
+  outline: none;
+}
