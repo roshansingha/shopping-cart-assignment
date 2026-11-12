@@ -27,7 +27,7 @@ Filter, search and sort choices are a third, smaller kind: view state that shoul
 - **Cart:** Zustand with the `persist` middleware (localStorage), exposing narrow selectors.
 - **Products:** fetched in a Next.js server component with `fetch` and Next's cache, validated with Zod, and passed to the client as props. No client-side fetching library.
 - **Filter / search / sort:** URL search params, so views are linkable and survive reloads.
-- **Cart logic:** written as pure functions (`addItem`, `setQuantity`, `removeItem`, `selectTotal`) separate from the store, so it can be unit tested without React.
+- **Cart logic:** written as pure functions (`addItem`, `decrementItem`, `setQuantity`, `removeItem`, `totalCents`) separate from the store, so it can be unit tested without React.
 
 ## Rationale
 
@@ -39,7 +39,7 @@ Filter, search and sort choices are a third, smaller kind: view state that shoul
 ## Persistence
 
 - Persist only `{ productId, quantity }` per line plus a schema `version`. Prices and titles are re-derived from fresh product data so stale prices are never charged.
-- On hydrate, validate the stored value with Zod; if it is corrupt or from an unknown version, discard it and start with an empty cart.
+- On hydrate, validate the stored value; if it is corrupt, too large (over 100 lines) or from an unknown version, discard it and start with an empty cart. (Originally Zod; see the amendment below.)
 - A `storage` event listener keeps multiple tabs in sync.
 
 ## Consequences
@@ -47,3 +47,12 @@ Filter, search and sort choices are a third, smaller kind: view state that shoul
 - Fast to build and easy to test.
 - If client-side fetching, pagination from a real backend, or mutations (checkout, live stock) are added, **revisit this ADR and add TanStack Query** for server state. The cart store would not need to change.
 - The team must agree on a convention for store slices (one file per feature) as the product grows.
+
+## Amendment (Phase 6, performance measurements)
+
+Two decisions above changed after measuring (details and numbers in `docs/performance-notes.md`):
+
+- **Persisted-state validation is hand-written, not Zod.** The cart store ships to the browser, and Zod added about 14 kB gzipped even in its tree-shakable build, for four checks. The behaviour (reject anything malformed, never half-trust it) is unchanged and covered by tests. Zod stays in use server-side for API responses.
+- **The cart no longer receives the product list from the server layout.** The original design passed product data to the cart drawer from the header, which grew the HTML with the catalog (280 kB of extra page data at 1,000 products). The drawer now fetches only its own lines through `GET /api/cart-products`, on demand. This keeps the rule that prices are never stored in the cart; they are looked up fresh.
+
+Consequence for the "revisit this ADR" trigger: this endpoint is the first client-driven server-state read. If more of them appear (order history, live stock), that is the point to adopt TanStack Query for caching and retries.

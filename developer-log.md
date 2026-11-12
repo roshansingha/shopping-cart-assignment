@@ -1,56 +1,214 @@
-# Developer log
+# Developer log: AI strategy, audit, verification, disagreement
 
-Running log of decisions, AI use and verification. Add to it as you go, not at the end.
+How AI was used on this project, and how its output was checked. Four required sections first, then the decisions and open items that don't fit them.
 
-## Strategy
+> **Reading note.** Sections marked **YOUR INPUT NEEDED** can only be written truthfully by the person who did the work. They are left explicit rather than filled with plausible text. Everything else below is drawn from the project record (the commands run, the numbers measured, the code before and after).
 
-<!-- How I split the work, what I asked the AI for, prompt iterations -->
+---
 
-## Audit
+## 1. AI strategy
 
-<!-- AI output I reviewed. Record at least 3 corrections, one structural. -->
+### What context the AI was given
 
-## Verification
+- **The assignment brief**, in full, and a **phase plan** (Phases 0 to 9 with time estimates, the deliverables checklist, and a "risks to watch" list). The plan carried the constraints: TypeScript, feature-based folders, integer cents for money, "decide the stock policy deliberately", "pick one edge case to deliberately not handle", and "don't claim a performance win without a before measurement".
+- **A project instruction file (`AGENTS.md`)** warning that this Next.js version has breaking changes and that the bundled docs in `node_modules/next/dist/docs/` must be read before writing code. This mattered repeatedly (see Audit, entry 7).
+- **A one-phase-at-a-time loop.** Each phase was requested separately, and each ended with the AI reporting what was built, which checks ran, and what was _not_ verified, before the next phase started.
 
-<!-- How I checked it worked: tests, mutation check, manual checks -->
+### How the prompting differed by task
 
-## Disagreement
+| Task type                 | How the AI was directed                                                                                                                                                                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture (ADR, state) | Options and constraints were given up front (Context vs Redux Toolkit vs Zustand vs Jotai, plus "separate server state"); the decision was written down while the trade-offs were fresh, then **amended** when later measurements contradicted it. |
+| Implementation            | Pure logic first (cart functions, query parsing, schemas), then UI on top, so each layer was testable before the next existed.                                                                                                                     |
+| Tests                     | Strategy first (which layer proves which claim, coverage thresholds and why), then tests, then a **mutation check** to prove the tests could fail.                                                                                                 |
+| Performance and security  | **Measure first, change second.** The AI was required to produce before numbers, and to report findings that did not support the plan's assumptions.                                                                                               |
 
-<!-- A real point where I disagreed with the AI and what I decided -->
+### An example of a prompt that had to be iterated
 
-## Phase 0 notes
+**YOUR INPUT NEEDED.** The conversation record contains no prompt that was rewritten because its first version produced poor output, so none is invented here. If you iterated on a prompt (for example the first attempt at an ADR, an accessibility request, or a test request that produced trivially-passing tests), describe it here: the first prompt, what was wrong with the result, and what you changed.
 
-- Stock policy: the API has no stock field, so a simulated per-line cap (`MAX_QUANTITY`) is enforced in cart logic.
-- Money is stored as integer cents.
-- TODO (reminder): add GitHub Actions CI (lint, typecheck, test).
-- TODO: check fakestoreapi.com from a deployed Vercel preview; if blocked, add a caching proxy route handler.
+### Where the AI pushed back on the plan
 
-## Phase 2 notes
+The plan said: if fakestoreapi.com is blocked from Vercel, build a route handler that proxies and caches it. The AI's response was that this would not help: the proxy would run on the same Vercel network that is blocked, and CORS is irrelevant because the app fetches on the server. What would help is a committed snapshot of the data used as an explicit fallback. This was recorded, not built, because it is only needed if the deployed check fails. (Evidence behind it: a `HEAD` request to the API got `403 cf-mitigated: challenge` from Cloudflare, while `GET` returned 200.)
 
-- Next 16 differences found in the bundled docs, not my memory: error boundaries receive `retry` (not `reset`); `searchParams` is a Promise and must be read inside `<Suspense>` with Cache Components; page props are typed with the global `PageProps<"/">`.
-- Lint (react-hooks) rejected writing a ref during render in `Filters`; moved it into an effect.
-- Cart add/remove buttons are intentionally left for Phase 3 (placeholder comment in `product-card.tsx`).
-- Not yet verified: production server smoke test and visual check in a browser (the command was blocked by the permission classifier).
+---
 
-## Phase 3 notes
+## 2. Human audit
 
-- Decision: no price snapshot in storage (see README cart table); ADR-001 already said this.
-- Decision: deliberately not handling multi-device sync.
-- Native `<dialog>` instead of a hand-built focus trap; revisit if browser support becomes an issue.
-- Not yet verified in a real browser: drawer focus return, two-tab sync, live-region announcements. Store-level tests cover persistence, corruption and tab-sync logic; Playwright (Phase 5) should cover the rest.
+Each entry below is a case where AI-written output was wrong, weak or risky, and was changed. **How each was caught is stated honestly:** by a test, a tool or a measurement that the workflow required. Where you personally spotted or rejected something in review, add it, or edit an entry to say so.
 
-## Phase 4 notes
+Entries are tagged **[structural]** (architecture, performance, security) or **[local]**. The assignment asks for at least three, with at least one structural. There are seven.
 
-- Found by checking my own work: form control borders (zinc-300/700) were 1.5:1 and 1.7:1, failing the 3:1 non-text contrast rule; fixed to zinc-500. Text contrast all passed.
-- Found by reading the code: card titles were `h3` directly under `h1` (skipped a level) and page/error each rendered their own `<main>`, which would break the skip-link target. Moved `<main id="main-content">` into the layout; titles are now `h2`.
-- ESLint (`no-html-link-for-pages`) rejected a plain `<a href="/">`; switched to `next/link`.
-- TODO: axe was NOT run (no browser run this phase). Add `@axe-core/playwright` in Phase 5 and run it on the listing, the open drawer and the empty/error states.
-- TODO: manually verify in a browser: skip link, Tab order, drawer focus return, 320px width, 200% zoom, VoiceOver announcements.
+### 1. [structural, performance] The header shipped the whole product catalog to the browser
 
-## Phase 5 notes (verification)
+Caught by: building against a 1,000-product mock after Lighthouse looked fine at 20 products.
 
-- Running Playwright for the first time found two real defects my unit tests could not: (1) "Add Product N to cart" violated axe `label-content-name-mismatch` (accessible name did not contain the visible "Add to cart"), now "Add to cart: Product N"; (2) the Cart button's accessible name rendered as "Cart , 3 items" because of an sr-only span, now an explicit `aria-label`. This closes the Phase 4 TODO: axe now runs on listing, empty state, open drawer and 320px width, with no violations.
-- Tooling finding: msw 3 renamed `onUnhandledRequest` to `onUnhandledFrame`. TypeScript flagged it; before that the "fail on unmocked requests" guard was silently only warning. Added `server.test.ts` to prove the guard works.
-- Tooling finding: RTL async helpers hang under Vitest fake timers, so the debounce tests use real timers (~0.7s).
-- Mutation check: 8 deliberate bugs, all caught (table in README). The check only counts if I saw tests fail, so I ran it as a script that restores each file and confirmed the suite is green again afterwards.
-- Known gaps: no automated mutation tool; E2E runs on Chromium only; the listing's real-API behaviour (CORS, rate limits) is untested and still a Phase 0 TODO to check from a Vercel preview.
+```tsx
+// Before: src/app/site-header.tsx. Every product's data was serialised into every page.
+export async function SiteHeader() {
+  const products = (await getProducts()).map(({ id, title, price, image }) => ({
+    id,
+    title,
+    price,
+    image,
+  }));
+  return (
+    <header>
+      … <CartDrawer products={products} productsUnavailable={unavailable} /> …
+    </header>
+  );
+}
+
+// After: the header fetches nothing. The drawer asks for only the cart's own lines, once opened.
+export function SiteHeader() {
+  return (
+    <header>
+      … <CartDrawer /> …
+    </header>
+  );
+}
+// cart-drawer.tsx:  useEffect(() => { if (open) void load(idsKey.split(",").map(Number)); }, …)
+//                   -> GET /api/cart-products?ids=1,2  (validated: positive integers, max 100)
+```
+
+Evidence: embedded page data at 1,000 products fell from **280.5 kB to 35.5 kB**, and now stays flat as the catalog grows. The README had claimed the browser only received the current page, so this was also a documentation claim the code did not meet.
+
+### 2. [structural, security] The product schema accepted dangerous URL schemes
+
+Caught by: asking "what does `z.url()` actually allow?" during the security phase.
+
+```ts
+// Before: accepts javascript:, data: and file: URLs
+image: z.url(),
+
+// After: https only. Verified against all 20 real products before tightening.
+image: z.url({ protocol: /^https$/ }),
+```
+
+Evidence: 7 new tests (`javascript:`, `data:`, `file:`, plain `http`, protocol-relative, not-a-URL, empty). Removing the restriction makes 6 tests fail.
+
+### 3. [structural, performance] Zod was shipped to every browser to validate four fields
+
+Caught by: tagging the client JavaScript chunks by library, which showed a 39.7 kB (gzipped) chunk containing Zod.
+
+```ts
+// Before: persistence.ts (ships to the browser)
+import { z } from "zod";
+const storedSchema = z.object({ lines: z.array(z.object({ productId: z.number().int().positive(), … })) });
+
+// After: small hand-written validator; Zod stays server-side only
+const isValidLine = (l: unknown) =>
+  isRecord(l) && Number.isInteger(l.productId) && (l.productId as number) > 0 && … ;
+```
+
+The first fix was also wrong: switching to `zod/mini` was expected to remove most of it but removed only about a third (213.0 to 199.5 kB), because Zod's core still shipped. Measuring each step, instead of assuming, is what led to the hand-written version (final: 213.0 to 185.2 kB, together with entry 1). Covered by 25 tests, each condition mutation-checked.
+
+### 4. [structural, performance] The LCP image was lazy-loaded
+
+Caught by: Lighthouse's "LCP request discovery" check scoring 0, once broken test images were fixed (see "Wrong turns" below).
+
+```tsx
+// Before: all 8 card images were loading="lazy", including the first row
+<Image src={product.image} alt="" fill sizes="…" />
+
+// After: first row preloaded, the single LCP candidate gets high fetch priority
+<Image src={product.image} alt="" fill sizes="…" preload={preload} fetchPriority={highPriority ? "high" : undefined} />
+```
+
+Evidence (5 runs each, applied throttling): mobile LCP **2478 ms to 1648 ms**, with non-overlapping ranges. Under Lighthouse's default simulated throttling the LCP did not change (Speed Index did), and both results are reported in `docs/performance-notes.md`.
+
+### 5. [local, accessibility] Button names did not contain their visible text
+
+Caught by: the first axe run in a real browser (`label-content-name-mismatch`). Unit tests could not see it.
+
+```tsx
+// Before: visible text "Add to cart", accessible name "Add Backpack to cart"
+aria-label={`Add ${title} to cart`}
+// After: the visible text is inside the name, so voice control ("click Add to cart") works
+aria-label={`Add to cart: ${title}`}
+```
+
+The same run found the Cart button's name read "Cart , 3 items" (a stray space from a screen-reader-only span); fixed with an explicit `aria-label`.
+
+### 6. [local, testing] The guard against unmocked network calls was silently not working
+
+Caught by: TypeScript flagging an unknown option after a test-library upgrade.
+
+```ts
+// Before: msw 3 renamed this option, so it was ignored and unmocked requests only warned
+server.listen({ onUnhandledRequest: "error" });
+// After: plus a test that proves a request without a handler really does fail
+server.listen({ onUnhandledFrame: "error" });
+```
+
+### 7. [local, framework] Deprecated and renamed Next.js 16 APIs
+
+Caught by: following the project instruction to read the bundled docs rather than trust memory. `error.tsx` receives `retry`, not `reset`; `priority` on `next/image` is deprecated in favour of `preload`; `searchParams` is a Promise that must be read inside `<Suspense>` with Cache Components.
+
+---
+
+## 3. Verification
+
+### How AI helped generate tests for edge cases
+
+The AI wrote the unit, integration and end-to-end tests from edge-case lists (zero and negative quantity, removing the last item, large quantities, NaN, rounding, duplicate adds, corrupted storage, API 500 / network failure / malformed payloads, hostile URL parameters and hostile API text). Edge cases came from the plan's checklist plus cases the AI added while building each layer.
+
+### How I checked the tests were meaningful, not trivially passing
+
+Passing tests prove little; the question is whether they would _fail_ when the code is wrong. Methods used, with results:
+
+| Method                                                      | What it proved                                                                                                                                                                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Mutation checks**, three rounds, done by hand             | Breaking the code on purpose, one change at a time: cart and money logic (8 of 8 caught), stored-cart validator and render isolation (6 of 6), security protections (6 of 6). Each mutant was restored and the suite re-run green.   |
+| **`it.fails` against a known-bad component**                | The code review exercise runs one spec against a flawed component (must fail all 5) and its refactor (must pass). The failures were then read as ordinary tests to confirm they failed for the _stated_ reasons, not harness errors. |
+| **Render-isolation test, then broken on purpose**           | A Profiler test shows only the changed product re-renders; replacing the selector with a whole-cart one made it fail.                                                                                                                |
+| **Negative control for the smoke test**                     | Pointed at a port with nothing listening, it fails all 11 checks and exits non-zero.                                                                                                                                                 |
+| **Coverage thresholds with reasoning**                      | 80% global, 95% on the pure money and input logic. Current: about 96%. Coverage is treated as a floor, not as proof.                                                                                                                 |
+| **Real-browser tests for what a simulated DOM cannot show** | Two-tab sync, focus return, axe, and the real CSP. These found defects unit tests could not (entries 5 and the CSP traps below).                                                                                                     |
+
+### Tests that passed or failed for the wrong reason (caught, not hidden)
+
+- **"eval is blocked" reported "allowed"** even though the CSP header was correct. Playwright's `page.evaluate()` runs over the DevTools protocol, which disables the eval restriction, and a script appended inside that call also runs inside it. Confirmed with a throwaway script (`EvalError` when run from a timer), then the test was rewritten.
+- **A mutant that silently did nothing:** a script's search pattern did not match after the formatter changed the line. The "PATTERN MISSING" message was noticed and that mutant re-run by hand instead of being counted as caught.
+- **A wrong expected value:** a test expected a total of `$4.00` where the fixtures give `$40.00`. The arithmetic was checked and the test fixed, not the code.
+- **My own broken measurements:** fixture image URLs returned 404, so the first Lighthouse runs left out image cost and showed an unrealistic LCP. It surfaced because Best Practices scored 96 with a console error. Documented in the performance notes; those runs are kept only for the JavaScript-driven metrics.
+
+### What has NOT been verified
+
+- Nothing has been tested on the deployed site yet (headers, `fakestoreapi.com` reachability from Vercel, `pnpm smoke <url>`).
+- GitHub Actions has never run; confirm it is green after the first push.
+- No screen-reader testing (VoiceOver or NVDA); no real-device or 200% zoom checks.
+- Playwright runs Chromium only.
+- In-memory search and sort have not been benchmarked at 1,000+ products.
+
+---
+
+## 4. A disagreement
+
+**YOUR INPUT NEEDED.** The assignment asks for an instance where the AI suggested something you did not go with, and your reasoning. Nothing in the project record is a substantive override, so none is invented here. Two small, real instances exist that you can use only if they match what you actually thought:
+
+1. After the performance phase, the AI offered to benchmark the in-memory search and sort at 1,000 and 10,000 products, and asked whether to do that or move on. You chose to move on to the security phase. It is still unmeasured (listed above).
+2. The AI flagged `alt=""` on product images as a decision for you (the title is adjacent text, but a stricter reviewer may want descriptive alt text). No decision was recorded.
+
+If you have a real disagreement (an architecture choice, a library, a test style, a design call), replace this section with it: what the AI suggested, what you did instead, and why.
+
+---
+
+## Decisions and open items
+
+**Decisions with reasons** (details in the README and docs):
+
+- **Stock policy:** the API has no stock field, so a simulated cap of 10 per line is enforced in the pure cart logic and shown with a visible, announced message.
+- **Money:** integer cents everywhere, converted once at the API boundary.
+- **No price snapshot in the cart:** only product id and quantity are stored; prices come from fresh product data, so a total is never stale.
+- **Deliberately not handled:** multi-device cart sync (needs accounts and a server-side cart).
+- **CSP:** allows inline scripts (`'unsafe-inline'`). Nonces force dynamic rendering and undo the performance work; the experimental SRI mode was tried and broke the app (16 of 21 tests failed). Documented as a known weakness, with when to revisit, in `docs/security-notes.md`.
+- **Dependency audit:** one moderate, dev-only finding (`minimatch`) accepted because no compatible patched release exists; CI fails on any production or high-severity finding.
+
+**Still to do before submitting:**
+
+1. Fill in the two **YOUR INPUT NEEDED** sections above.
+2. Commit and push; confirm GitHub Actions is green.
+3. Deploy to Vercel, then run `pnpm smoke https://<your-url>` and re-check the response headers.
+4. Put the live URL at the top of the README.
+5. If the listing shows its error state on Vercel (API blocked), build the snapshot fallback described under "Where the AI pushed back on the plan".
