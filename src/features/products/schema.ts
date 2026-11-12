@@ -8,7 +8,8 @@ export const productSchema = z.object({
   price: z.number().nonnegative().finite().transform(toCents),
   description: z.string(),
   category: z.string().min(1),
-  image: z.url(),
+  // https only: z.url() alone also accepts javascript:, data: and http: URLs
+  image: z.url({ protocol: /^https$/ }),
   rating: z.object({
     rate: z.number().min(0).max(5),
     count: z.number().int().nonnegative(),

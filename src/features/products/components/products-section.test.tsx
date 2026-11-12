@@ -49,6 +49,47 @@ describe("listing: success", () => {
   });
 });
 
+describe("listing: hostile content is rendered as text, never as markup", () => {
+  const hostile = {
+    ...rawProducts[0],
+    title: "<img src=x onerror=alert(1)><script>window.pwned=1</script>",
+    category: "<b onmouseover=alert(2)>x</b>",
+  };
+
+  it("escapes HTML in titles and categories coming from the API", async () => {
+    serve([hostile, ...rawProducts.slice(1)]);
+    await renderSection();
+    expect(screen.getByText(hostile.title)).toBeInTheDocument(); // shown literally
+    expect(document.querySelector("img[onerror]")).toBeNull();
+    expect(document.querySelector("script")).toBeNull();
+    expect(document.querySelector("b[onmouseover]")).toBeNull();
+    expect((window as unknown as { pwned?: number }).pwned).toBeUndefined();
+  });
+
+  it("does not reflect a hostile search term as markup", async () => {
+    serve();
+    await renderSection({ q: '"><script>window.pwned=1</script>' });
+    expect(document.querySelector("script")).toBeNull();
+    expect(screen.getByText("No products match your filters.")).toBeInTheDocument();
+  });
+
+  it("rejects a product whose image URL is javascript: instead of rendering it", async () => {
+    serve([{ ...rawProducts[0], image: "javascript:alert(1)" }]);
+    await expect(ProductsSection({ searchParams: Promise.resolve({}) })).rejects.toMatchObject({
+      kind: "parse",
+    });
+  });
+});
+
+describe("listing: image loading", () => {
+  it("preloads only the first row of images (the LCP candidate) and keeps the rest lazy", async () => {
+    serve();
+    await renderSection();
+    const flags = [...document.querySelectorAll("img")].map((i) => i.getAttribute("data-preload"));
+    expect(flags).toEqual(["true", "true", "true", "true", "false", "false", "false", "false"]);
+  });
+});
+
 describe("listing: filter and sort", () => {
   it("filters by category", async () => {
     serve();
