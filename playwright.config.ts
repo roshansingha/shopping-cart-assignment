@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Locally pnpm may not be on PATH, so go through corepack; CI installs pnpm directly.
+const pnpm = process.env.CI ? "pnpm" : "corepack pnpm";
 const APP_PORT = 3100;
 const API_PORT = 4010;
 
@@ -20,7 +22,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: `corepack pnpm build && corepack pnpm start -p ${APP_PORT}`,
+      command: `${pnpm} build && ${pnpm} start -p ${APP_PORT}`,
       url: `http://localhost:${APP_PORT}`,
       timeout: 240_000,
       reuseExistingServer: !process.env.CI,
