@@ -14,8 +14,14 @@ const products =
       }))
     : rawProducts;
 
+// MOCK_API_STATUS=403 simulates the real API refusing us (Cloudflare screening datacenter IPs).
+const STATUS = Number(process.env.MOCK_API_STATUS ?? 200);
+
 createServer((req, res) => {
-  if (req.url?.startsWith("/products")) {
+  if (req.url?.startsWith("/products") && STATUS !== 200) {
+    res.writeHead(STATUS, { "content-type": "text/html" });
+    res.end("<html>Just a moment...</html>");
+  } else if (req.url?.startsWith("/products")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(products));
   } else {

@@ -108,3 +108,11 @@ Run with `pnpm audit` on 2026-11-12.
 - **No automated dynamic scan** (for example OWASP ZAP) and no third-party penetration test.
 - **No HSTS preload** and no Subresource Integrity (see the CSP section).
 - The audit reflects one day's advisory database; new advisories appear over time, which is why the check runs in CI.
+
+## Addendum: the saved catalog (resilience)
+
+- **Trust:** `fallback-products.json` is committed code, but it still goes through the same Zod schema as live data every time it is used, and a test checks every image URL against the optimizer's allow-list. A bad edit fails in CI, not in production.
+- **Honesty to users:** when the fallback is served, the page says so. It does not present old prices as current.
+- **What this deliberately does not do:** it does not try to get past the API's bot screening (for example by sending a browser-like User-Agent). That would be evading a protection the API owner chose; degrading gracefully is the right response to being refused.
+- **Failure masking:** only expected API failures (network, HTTP error, unexpected payload) trigger the fallback. Any other error is rethrown, so a bug in our own code cannot be hidden as an "outage" (tested).
+- **Visibility:** every fallback logs a warning with the reason (for example `http 403`), so an outage shows up in server logs.

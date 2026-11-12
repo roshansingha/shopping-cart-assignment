@@ -31,13 +31,7 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     ".next-e2e/types/**/*.ts",
-    ".next-e2e/dev/types/**/*.ts",
-    ".next-perf/types/**/*.ts",
-    ".next-perf/dev/types/**/*.ts",
-    ".next-a/types/**/*.ts",
-    ".next-a/dev/types/**/*.ts",
-    ".next-off/types/**/*.ts",
-    ".next-off/dev/types/**/*.ts"
+    ".next-e2e/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

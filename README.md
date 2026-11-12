@@ -97,6 +97,7 @@ FakeStore returns only 20 products, so the listing is deliberately built so the 
 - **What would change with a real backend:** the whole-catalog cache would stop making sense. `queryProducts` would become a call that passes `q`, `category`, `sort` and `page` to the API (server-side filtering and cursor or offset pagination), cached per query. The URL contract and UI stay the same. Revisit ADR-001 then (TanStack Query for client-side server state).
 - **The browser never receives the whole catalog.** Only the current page is rendered, and the cart drawer fetches just its own lines on demand. (An earlier version leaked the full list through the header; see finding 1 in [docs/performance-notes.md](docs/performance-notes.md).)
 - **Not measured:** the cost of in-memory search and sort at 1,000+ products. At that size it is almost certainly milliseconds, but I have not benchmarked it.
+- **If the live API is unreachable, the saved catalog is served.** A committed copy of the 20 products (`fallback-products.json`, validated by the same schema) is used when the API is blocked, down, or returns something unexpected, with a visible notice that prices may be out of date. It is cached for minutes, not hours, so live data returns quickly after an outage. This exists because a real deploy failed: Netlify's build servers got a `403` from fakestoreapi.com (it sits behind Cloudflare), and because the listing is prerendered, one refused request failed the whole build.
 - **Loading, empty and error states:** skeleton grid inside `<Suspense>`, an empty state with a "Clear filters" link, and `error.tsx` with a retry button.
 
 ## Cart: edge cases and decisions
@@ -143,7 +144,7 @@ The cart drawer is a native `<dialog>` opened with `showModal()`, which gives th
 ## Testing
 
 ```bash
-pnpm test       # Vitest: unit + integration (172 passing, plus 5 intentional expected-failures, ~5s)
+pnpm test       # Vitest: unit + integration (187 passing, plus 5 intentional expected-failures, ~6s)
 pnpm coverage   # same, with coverage thresholds enforced (about 96% overall)
 pnpm e2e        # Playwright (Chromium): builds the app and runs 21 browser tests
 ```
@@ -208,8 +209,8 @@ Full threat model, controls, the CSP trade-off and the dependency audit: [docs/s
 ## Continuous integration and deployment
 
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push to `main` and on pull requests. One job runs the dependency audit, lint, typecheck, format check and the coverage run (which fails below the thresholds); a second runs the Playwright suite.
-- **Deployment:** Vercel, with no environment variables needed (the product API URL is fixed in code). After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and has already passed 11 of 11 checks against a local production build using the real API.
-- **Not yet confirmed from a deployment:** that `fakestoreapi.com` is reachable from Vercel's servers (it sits behind Cloudflare, which challenged one of my `HEAD` requests). If it is blocked, the listing shows its error state; see `developer-log.md` for the fallback plan.
+- **Deployment:** Netlify (or Vercel), with no environment variables needed (the product API URL is fixed in code). Do not set `PRODUCTS_API_URL`: it is only for local mocks. After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and has already passed 11 of 11 checks against a local production build using the real API.
+- **Known external risk, now handled:** `fakestoreapi.com` refused Netlify's build servers with a `403`. The saved-catalog fallback keeps the build and the site working. **Not yet confirmed:** whether product _images_ (also served by fakestoreapi.com, through the host's image optimizer) load on the deployed site; check this after redeploying.
 
 ## Documentation
 

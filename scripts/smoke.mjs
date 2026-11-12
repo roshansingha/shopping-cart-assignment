@@ -31,7 +31,8 @@ await check("home page responds 200 with the listing", async () => {
   homeHeaders = res.headers;
   assert(/<h1[^>]*>Products<\/h1>/.test(home), "no <h1>Products</h1>");
   assert(cards(home) === 8, `expected 8 product cards on page 1, found ${cards(home)}`);
-  return `${total(home)} products, 8 on page 1`;
+  const saved = text(home).includes("saved copy of the catalog");
+  return `${total(home)} products, 8 on page 1${saved ? "  (NOTE: serving the saved catalog, live API unreachable)" : ""}`;
 });
 
 await check("security headers are present, framework banner hidden", async () => {

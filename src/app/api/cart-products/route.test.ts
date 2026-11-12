@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { rawProducts } from "@/test/fixtures";
 import { server } from "@/test/server";
 import { GET } from "./route";
@@ -28,8 +28,13 @@ describe("GET /api/cart-products", () => {
     expect((await call("")).status).toBe(400);
     expect((await call("?ids=1,abc")).status).toBe(400);
   });
-  it("answers 502 when the product service fails", async () => {
-    serve(() => HttpResponse.json({}, { status: 500 }));
-    expect((await call("?ids=1")).status).toBe(502);
+  it("still answers from the saved catalog when the product service fails", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    serve(() => HttpResponse.json({}, { status: 403 }));
+    const res = await call("?ids=1,2");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.map((p: { id: number }) => p.id)).toEqual([1, 2]);
+    expect(body[0].price).toBeGreaterThan(0);
   });
 });

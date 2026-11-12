@@ -73,11 +73,12 @@ describe("listing: hostile content is rendered as text, never as markup", () => 
     expect(screen.getByText("No products match your filters.")).toBeInTheDocument();
   });
 
-  it("rejects a product whose image URL is javascript: instead of rendering it", async () => {
+  it("never renders a javascript: image URL: the bad payload is dropped for the saved catalog", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     serve([{ ...rawProducts[0], image: "javascript:alert(1)" }]);
-    await expect(ProductsSection({ searchParams: Promise.resolve({}) })).rejects.toMatchObject({
-      kind: "parse",
-    });
+    await renderSection();
+    expect(document.querySelector('img[src^="javascript:"]')).toBeNull();
+    expect(screen.getByRole("note")).toHaveTextContent("saved copy of the catalog");
   });
 });
 
@@ -138,14 +139,27 @@ describe("listing: empty, loading, error", () => {
   });
 
   it.each([
-    ["HTTP 500", () => HttpResponse.json({}, { status: 500 }), "http"],
-    ["network failure", () => HttpResponse.error(), "network"],
-    ["malformed payload", () => HttpResponse.json([{ id: "x" }]), "parse"],
-  ])("rejects with a normalized error on %s", async (_n, resolver, kind) => {
+    [
+      "HTTP 403 (blocked, as on a deploy build)",
+      () => HttpResponse.html("Just a moment...", { status: 403 }),
+    ],
+    ["HTTP 500", () => HttpResponse.json({}, { status: 500 })],
+    ["network failure", () => HttpResponse.error()],
+    ["malformed payload", () => HttpResponse.json([{ id: "x" }])],
+  ])("serves the saved catalog with a notice on %s", async (_n, resolver) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     server.use(http.get(URL, resolver));
-    await expect(ProductsSection({ searchParams: Promise.resolve({}) })).rejects.toMatchObject({
-      kind,
-    });
+    await renderSection(); // must not throw
+    expect(screen.getByRole("note")).toHaveTextContent("Live product data is unavailable");
+    expect(screen.getByRole("status")).toHaveTextContent("20 products"); // the saved catalog
+    expect(titles()).toHaveLength(8);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("serving the saved catalog"));
+  });
+
+  it("shows no notice when live data loads", async () => {
+    serve();
+    await renderSection();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("error boundary shows the message and retry calls retry()", async () => {

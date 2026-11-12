@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   if (!ids) return Response.json({ error: "Invalid ids" }, { status: 400 });
   try {
     const wanted = new Set(ids);
-    const products = await getProducts();
+    const { products } = await getProducts();
     return Response.json(products.filter((p) => wanted.has(p.id)).map(toCartProduct));
   } catch {
     return Response.json({ error: "Product service unavailable" }, { status: 502 });

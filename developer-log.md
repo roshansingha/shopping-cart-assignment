@@ -37,7 +37,7 @@ The plan said: if fakestoreapi.com is blocked from Vercel, build a route handler
 
 Each entry below is a case where AI-written output was wrong, weak or risky, and was changed. **How each was caught is stated honestly:** by a test, a tool or a measurement that the workflow required. Where you personally spotted or rejected something in review, add it, or edit an entry to say so.
 
-Entries are tagged **[structural]** (architecture, performance, security) or **[local]**. The assignment asks for at least three, with at least one structural. There are seven.
+Entries are tagged **[structural]** (architecture, performance, security) or **[local]**. The assignment asks for at least three, with at least one structural. There are eight.
 
 ### 1. [structural, performance] The header shipped the whole product catalog to the browser
 
@@ -145,6 +145,36 @@ server.listen({ onUnhandledFrame: "error" });
 
 Caught by: following the project instruction to read the bundled docs rather than trust memory. `error.tsx` receives `retry`, not `reset`; `priority` on `next/image` is deprecated in favour of `preload`; `searchParams` is a Promise that must be read inside `<Suspense>` with Cache Components.
 
+### 8. [structural, resilience] One refused request failed the whole deploy
+
+Caught by: the first real Netlify build, which failed (`Product service returned 403`, `Error occurred prerendering page "/"`). This had been predicted in Phase 0 and in the "Where the AI pushed back on the plan" note above, but nothing had been built, because it could only be tested on a deployed host.
+
+```ts
+// Before: any API failure (here a 403 from Cloudflare) propagated and failed the prerender
+export async function getProducts() {
+  "use cache";
+  cacheLife("hours");
+  return fetchProducts(fetch, process.env.PRODUCTS_API_URL);
+}
+
+// After: expected API failures serve a committed, schema-validated catalog, labelled as such,
+// and cached for minutes so live data returns quickly. Real bugs are still rethrown.
+export async function getProducts(): Promise<ProductsResult> {
+  "use cache";
+  try {
+    const products = await fetchProducts(fetch, process.env.PRODUCTS_API_URL);
+    cacheLife("hours");
+    return { products, source: "live" };
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    cacheLife("minutes");
+    return { products: getFallbackProducts(), source: "fallback" };
+  }
+}
+```
+
+Verification: the failure was **reproduced locally first** by pointing the build at a mock that returns 403 (same error as Netlify), then the fix was shown to make that same build succeed and serve 8 cards with the notice. Smoke test 11/11 in that state. Five mutants (no fallback, fallback cached for an hour, bugs masked as outages, fallback labelled live, notice removed) were all caught. Deliberately not done: sending a browser-like User-Agent to get past Cloudflare, since that is evading the API owner's bot protection.
+
 ---
 
 ## 3. Verification
@@ -175,7 +205,7 @@ Passing tests prove little; the question is whether they would _fail_ when the c
 
 ### What has NOT been verified
 
-- Nothing has been tested on the deployed site yet (headers, `fakestoreapi.com` reachability from Vercel, `pnpm smoke <url>`).
+- The fix for the Netlify 403 is verified locally against a simulated block, not yet on Netlify itself. **Product images** (also served by fakestoreapi.com through the host's image optimizer) may be refused too; check after redeploying and run `pnpm smoke <url>`.
 - GitHub Actions has never run; confirm it is green after the first push.
 - No screen-reader testing (VoiceOver or NVDA); no real-device or 200% zoom checks.
 - Playwright runs Chromium only.
@@ -209,6 +239,6 @@ If you have a real disagreement (an architecture choice, a library, a test style
 
 1. Fill in the two **YOUR INPUT NEEDED** sections above.
 2. Commit and push; confirm GitHub Actions is green.
-3. Deploy to Vercel, then run `pnpm smoke https://<your-url>` and re-check the response headers.
+3. Redeploy to Netlify, then run `pnpm smoke https://<your-url>` and re-check the response headers and product images.
 4. Put the live URL at the top of the README.
-5. If the listing shows its error state on Vercel (API blocked), build the snapshot fallback described under "Where the AI pushed back on the plan".
+5. If product images are blocked on the host, consider bundling the 20 images in `public/` for fallback mode.

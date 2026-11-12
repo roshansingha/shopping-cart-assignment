@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import type { ImgHTMLAttributes } from "react";
 
 // Outside the Next runtime: no cache layer, no router, no image optimizer.
-vi.mock("next/cache", () => ({ cacheLife: () => {} }));
+vi.mock("next/cache", () => ({ cacheLife: vi.fn() }));
 vi.mock("next/navigation", async () => {
   const { nav } = await import("./nav");
   return {
