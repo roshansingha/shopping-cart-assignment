@@ -121,6 +121,19 @@ await check("the optimizer refuses images from other hosts", async () => {
   assert(res.status === 400 || res.status === 404, `expected a refusal, got ${res.status}`);
 });
 
+await check(
+  "upstream status (informational): can this host reach the live product API?",
+  async () => {
+    const res = await get("/api/upstream-status");
+    assert(res.status === 200, `status ${res.status}`);
+    const b = await res.json();
+    if (!b.reachable) return `NOT reachable (${b.error})`;
+    return b.ok
+      ? `live API reachable (HTTP ${b.status}, ${b.ms} ms)`
+      : `live API REFUSED us: HTTP ${b.status}, server=${b.server}, cf-mitigated=${b.cfMitigated}`;
+  },
+);
+
 await check("unknown routes return 404", async () => {
   const res = await get("/definitely-not-a-page");
   assert(res.status === 404, `status ${res.status}`);

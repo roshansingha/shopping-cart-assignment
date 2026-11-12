@@ -22,7 +22,10 @@ export async function getProducts(): Promise<ProductsResult> {
   } catch (error) {
     if (!(error instanceof ApiError)) throw error; // a bug, not an outage: do not mask it
     const status = error.status ? ` ${error.status}` : "";
-    console.warn(`Product API unavailable (${error.kind}${status}); serving the saved catalog.`);
+    const detail = error.detail ? `, ${error.detail}` : "";
+    console.warn(
+      `Product API unavailable (${error.kind}${status}${detail}); serving the saved catalog.`,
+    );
     // Short cache: once the API recovers we want live data again within minutes, not an hour.
     cacheLife("minutes");
     return { products: getFallbackProducts(), source: "fallback" };

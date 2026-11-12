@@ -206,6 +206,7 @@ Passing tests prove little; the question is whether they would _fail_ when the c
 
 ### What has NOT been verified
 
+- **Both Netlify and Vercel show the saved-catalog notice**, so the API is refusing (or failing for) both hosts. It is inferred, not proven, that this is Cloudflare screening data-centre traffic: the failing request's responder was not logged. Added `/api/upstream-status` and responder logging (`server=`, `cf-mitigated=`) so the next deploy shows the cause directly. Both deployments pass the smoke test (11/11 before this change).
 - The fix for the Netlify 403 is verified locally against a simulated block, not yet on Netlify itself. **Product images** (also served by fakestoreapi.com through the host's image optimizer) may be refused too; check after redeploying and run `pnpm smoke <url>`.
 - GitHub Actions has never run; confirm it is green after the first push.
 - No screen-reader testing (VoiceOver or NVDA); no real-device or 200% zoom checks.

@@ -40,6 +40,21 @@ describe("getProducts", () => {
     expect(cacheLife).toHaveBeenCalledExactlyOnceWith("minutes");
   });
 
+  it("names the responder in the log, so a Cloudflare block is recognisable", async () => {
+    server.use(
+      http.get(URL, () =>
+        HttpResponse.html("Just a moment...", {
+          status: 403,
+          headers: { server: "cloudflare", "cf-mitigated": "challenge" },
+        }),
+      ),
+    );
+    await getProducts();
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("server=cloudflare cf-mitigated=challenge"),
+    );
+  });
+
   it("logs why it fell back, so an outage is visible in server logs", async () => {
     server.use(http.get(URL, () => HttpResponse.json({}, { status: 403 })));
     await getProducts();

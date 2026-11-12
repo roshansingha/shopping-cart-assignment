@@ -210,6 +210,7 @@ Full threat model, controls, the CSP trade-off and the dependency audit: [docs/s
 
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push to `main` and on pull requests. One job runs the dependency audit, lint, typecheck, format check and the coverage run (which fails below the thresholds); a second runs the Playwright suite.
 - **Deployment:** Netlify (or Vercel), with no environment variables needed (the product API URL is fixed in code). Do not set `PRODUCTS_API_URL`: it is only for local mocks. After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and has already passed 11 of 11 checks against a local production build using the real API.
+- **Diagnosing a deployment:** open `/api/upstream-status` on the deployed site. It says whether the live product API is reachable from that host and who refused it if not. `pnpm smoke <url>` prints the same result as an informational line.
 - **Known external risk, now handled:** `fakestoreapi.com` refused Netlify's build servers with a `403`. The saved-catalog fallback keeps the build and the site working. **Not yet confirmed:** whether product _images_ (also served by fakestoreapi.com, through the host's image optimizer) load on the deployed site; check this after redeploying.
 
 ## Documentation

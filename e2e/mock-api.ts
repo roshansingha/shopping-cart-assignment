@@ -19,7 +19,11 @@ const STATUS = Number(process.env.MOCK_API_STATUS ?? 200);
 
 createServer((req, res) => {
   if (req.url?.startsWith("/products") && STATUS !== 200) {
-    res.writeHead(STATUS, { "content-type": "text/html" });
+    res.writeHead(STATUS, {
+      "content-type": "text/html",
+      server: "cloudflare",
+      "cf-mitigated": "challenge",
+    });
     res.end("<html>Just a moment...</html>");
   } else if (req.url?.startsWith("/products")) {
     res.writeHead(200, { "content-type": "application/json" });

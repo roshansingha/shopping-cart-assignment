@@ -10,10 +10,21 @@ export class ApiError extends Error {
     public readonly kind: ApiErrorKind,
     message: string,
     public readonly status?: number,
+    /** Who answered, e.g. "server=cloudflare cf-mitigated=challenge". Never the response body. */
+    public readonly detail?: string,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** Names the responder (a CDN, a bot check) so an outage is diagnosable from logs alone. */
+function describeResponder(headers: Headers): string | undefined {
+  const parts = ["server", "cf-mitigated"].flatMap((h) => {
+    const v = headers.get(h);
+    return v ? [`${h}=${v}`] : [];
+  });
+  return parts.length ? parts.join(" ") : undefined;
 }
 
 export async function fetchProducts(
@@ -27,7 +38,12 @@ export async function fetchProducts(
     throw new ApiError("network", "Could not reach the product service.");
   }
   if (!res.ok) {
-    throw new ApiError("http", `Product service returned ${res.status}.`, res.status);
+    throw new ApiError(
+      "http",
+      `Product service returned ${res.status}.`,
+      res.status,
+      describeResponder(res.headers),
+    );
   }
   let json: unknown;
   try {
