@@ -3,8 +3,8 @@
 The aim is not a high test count. It is tests that **fail when the code is wrong**, placed where
 they can prove the most for the least effort.
 
-At the time of writing: 205 passing tests plus 5 that are meant to fail (see "How we know the tests
-are meaningful"), in 21 files, and 21 browser tests.
+At the time of writing: 214 passing tests plus 5 that are meant to fail (see "How we know the tests
+are meaningful"), in 21 files, and 22 browser tests.
 
 ## The principles
 
@@ -106,6 +106,10 @@ Every break was caught:
 - **The saved-catalogue fallback:** 5 of 5 (including a bug being disguised as an outage).
 - **The shared cart hook and utility:** 5 of 5 (for example fetching while disabled, or showing
   $0.00 instead of hiding the total while loading).
+- **The focus and search-box fixes:** 8 of 8 (for example the search box not following the URL,
+  focus not moved after Add, `disabled` instead of `aria-disabled` at the cap, and the drawer
+  opened non-modally). One survived at first, always focusing the first drawer line, so a
+  three-line test was added.
 
 This was done by hand, not with an automated tool, so a break we did not think of could survive.
 

@@ -167,10 +167,10 @@ The cart drawer is a native `<dialog>` opened with `showModal()`, which gives th
 The reasoning behind these layers and thresholds is in [docs/testing-strategy.md](docs/testing-strategy.md).
 
 ```bash
-pnpm test       # Vitest: unit + integration (205 passing, plus 5 intentional expected-failures, ~6s)
+pnpm test       # Vitest: unit + integration (214 passing, plus 5 intentional expected-failures, ~6s)
 pnpm coverage   # same, with coverage thresholds enforced
 pnpm coverage:report   # also writes the committed report, docs/coverage-report.md (about 96% overall)
-pnpm e2e        # Playwright (Chromium): builds the app and runs 21 browser tests
+pnpm e2e        # Playwright (Chromium): builds the app and runs 22 browser tests
 ```
 
 | Layer       | Tools                                | What it covers                                                                                                                                                                                                                                                                                                             |
@@ -193,13 +193,16 @@ pnpm e2e        # Playwright (Chromium): builds the app and runs 21 browser test
 
 ### How I know the tests are meaningful (mutation checks)
 
-Coverage shows code ran, not that tests would notice it breaking. Three times I broke the code on purpose, one change at a time, and re-ran the suite:
+Coverage shows code ran, not that tests would notice it breaking. Several times I broke the code on purpose, one change at a time, and re-ran the suite:
 
 | Round                                                | Mutations                                                                                                                                                                                        | Caught |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
 | Cart and money logic (Phase 5)                       | cap removed, zero quantity no longer removes, total ignores quantity, decrement does nothing, `removeItem` keeps the item, stored cap not enforced, `floor` instead of `round`, page not clamped | 8 of 8 |
 | Stored-cart validator and render isolation (Phase 6) | five validator conditions removed one at a time; the card subscribing to the whole cart instead of its own quantity                                                                              | 6 of 6 |
 | Security protections (Phase 7)                       | image scheme check removed, eval allowed in production, framing allowed, images from any origin, `nosniff` dropped, id validator loosened                                                        | 6 of 6 |
+| Saved-catalogue fallback                             | no fallback, fallback cached for an hour, bugs masked as outages, fallback labelled live, notice removed                                                                                         | 5 of 5 |
+| Shared cart hook and utility                         | fetching while disabled, `$0.00` shown instead of hiding the total while loading, and three more                                                                                                 | 5 of 5 |
+| Focus and search-box fixes                           | search box not following the URL, own writes not ignored, focus not moved after Add or −, `disabled` instead of `aria-disabled`, drawer focus not moved, always the first line, non-modal drawer | 8 of 8 |
 
 Not done: an automated mutation tool (Stryker). These were manual spot checks of the highest-risk logic, so a mutant in code I did not think to break could still survive.
 
@@ -232,8 +235,8 @@ Full threat model, controls, the CSP trade-off and the dependency audit: [docs/s
 
 ## Continuous integration and deployment
 
-- **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push to `main` and on pull requests. One job runs the dependency audit, lint, typecheck, format check and the coverage run (which fails below the thresholds); a second runs the Playwright suite.
-- **Deployment:** Netlify (or Vercel), with no environment variables needed (the product API URL is fixed in code). Do not set `PRODUCTS_API_URL`: it is only for local mocks. After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and passes 12 of 12 checks against the live site (https://fake-store-api-shopping-cart.netlify.app/).
+- **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push to `main` and on pull requests, and is green on the latest commit ([run for `001bf92`](https://github.com/roshansingha/shopping-cart-assignment/actions/runs/43471288694)). One job runs the dependency audit, lint, typecheck, format check and the coverage run (which fails below the thresholds); a second runs the Playwright suite.
+- **Deployment:** Netlify (or Vercel), with no environment variables needed (the product API URL is fixed in code). Do not set `PRODUCTS_API_URL`: it is only for local mocks. After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and passes 12 of 12 checks against the live site (https://fake-store-api-shopping-cart.netlify.app/), last run on 2026-11-13 after deploying commit `001bf92`. The keyboard-focus and search-box behaviour, which the smoke test does not cover, was also checked in a real browser on the live site: focus moves to the replacing control after Add, after − at quantity 1, at the quantity cap and after removing drawer lines, and the search box follows "Clear filters" and Back (7 of 7 checks).
 - **Diagnosing a deployment:** open `/api/upstream-status` on the deployed site. It says whether the live product API is reachable from that host and who refused it if not. `pnpm smoke <url>` prints the same result as an informational line.
 - **On the deployed site, the live product API is blocked, so the saved catalog is served.** `fakestoreapi.com` sits behind Cloudflare, which refuses the host's requests (`/api/upstream-status` reports `HTTP 403, server=cloudflare, cf-mitigated=challenge`). The committed, schema-validated `fallback-products.json` is used instead, with a visible notice on the page, and the site works normally: listing, filters, cart and checks all pass. Product images still load through the host's image optimizer. We deliberately do not disguise the requests to get past Cloudflare's bot check.
 

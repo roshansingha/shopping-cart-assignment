@@ -370,17 +370,17 @@ layer.
 Passing tests prove little; the question is whether they would _fail_ when the code is wrong.
 Methods used, with results:
 
-- **Mutation checks**, five rounds, done by hand: Breaking the code on purpose, one change at a
+- **Mutation checks**, six rounds, done by hand: Breaking the code on purpose, one change at a
   time: cart and money logic (8 of 8 caught), stored-cart validator and render isolation (6 of 6),
-  security protections (6 of 6), the saved-catalogue fallback (5 of 5) and the shared cart hook
-  and utility (5 of 5). Each mutant was restored and the suite re-run green.
+  security protections (6 of 6), the saved-catalogue fallback (5 of 5), the shared cart hook
+  and utility (5 of 5), and the focus and search-box fixes (8 of 8). Each mutant was restored and the suite re-run green.
 - **`it.fails` against a known-bad component**: The code review exercise runs one spec against a
   flawed component (must fail all 5) and its refactor (must pass). The failures were then read as
   ordinary tests to confirm they failed for the _stated_ reasons, not harness errors.
 - **Render-isolation test, then broken on purpose**: A Profiler test shows only the changed
   product re-renders; replacing the selector with a whole-cart one made it fail.
 - **Negative control for the smoke test**: Pointed at a port with nothing listening, it fails all
-  11 checks and exits non-zero.
+  12 checks and exits non-zero.
 - **Coverage thresholds with reasoning**: 80% global, 95% on the pure money and input logic.
   Current: about 96%. Coverage is treated as a floor, not as proof.
 - **Real-browser tests for what a simulated DOM cannot show**: Two-tab sync, focus return, axe,
@@ -423,8 +423,12 @@ a break.
   the host with `HTTP 403, server=cloudflare, cf-mitigated=challenge`, so the earlier guess (that
   Cloudflare screens data-centre traffic) is now confirmed, and the site serves the saved catalog
   with its notice. Product images load through the host's image optimizer.
-- GitHub Actions has run green on this repository (lint, types, format, audit, coverage and
-  Playwright).
+- **Confirmed after deploying `001bf92`** (the focus and search-box fixes): the smoke test still
+  passes 12/12, and a one-off browser script against the live site passed 7 of 7 checks of the new
+  behaviour (focus after Add, after − at quantity 1, at the cap, and after removing the first and
+  last drawer lines; the search box clearing with "Clear filters" and returning on Back).
+- GitHub Actions is green on the latest commit, `001bf92` (lint, types, format, audit, coverage
+  and Playwright), and on every earlier commit since the clean-checkout typecheck fix.
 - No screen-reader testing (VoiceOver or NVDA); no real-device or 200% zoom checks.
 - Playwright runs Chromium only.
 - In-memory search and sort were benchmarked on synthetic data on one laptop
