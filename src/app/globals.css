@@ -36,6 +36,26 @@ body {
   }
 }
 
+/*
+ * Form fields: focus is a neutral 2px edge that replaces the field's own border, not a coloured
+ * ring floating outside it. It must stay visible (WCAG 2.4.7): 17.9:1 on a white field and
+ * 15.1:1 on a dark one, and clearly different from the resting border (3.7:1 and 4.1:1).
+ */
+input:focus-visible,
+select:focus-visible {
+  outline-color: #171717;
+  outline-width: 2px;
+  outline-offset: -1px;
+  border-color: #171717;
+}
+@media (prefers-color-scheme: dark) {
+  input:focus-visible,
+  select:focus-visible {
+    outline-color: #ededed;
+    border-color: #ededed;
+  }
+}
+
 /* Skip link: hidden until focused, then pinned top-left. */
 .skip-link {
   position: absolute;

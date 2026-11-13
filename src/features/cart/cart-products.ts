@@ -34,3 +34,15 @@ export function parseIds(param: string | null): number[] | null {
   }
   return [...new Set(ids)];
 }
+
+/** What to call a cart line: its title, or an honest placeholder while loading or if it is gone. */
+export function lineTitle(
+  productId: number,
+  byId: Record<number, CartProduct>,
+  unavailable: Record<number, true>,
+): string {
+  return (
+    byId[productId]?.title ??
+    (unavailable[productId] ? `Unavailable item #${productId}` : "Loading…")
+  );
+}

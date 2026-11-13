@@ -78,7 +78,12 @@ test.describe("cart", () => {
     await addToCart(page, 1).click();
     const plus = page.getByRole("button", { name: "Increase quantity of Product 1" });
     for (let i = 1; i < 10; i++) await plus.click();
-    await expect(plus).toBeDisabled();
+    // aria-disabled, not disabled, so keyboard focus is not dropped at the cap
+    await expect(plus).toHaveAttribute("aria-disabled", "true");
+    // Playwright will not click an aria-disabled control; a keyboard user can still press it
+    await plus.press("Enter");
+    await expect(plus).toBeFocused();
+    await expect(cartButton(page)).toHaveAccessibleName("Cart, 10 items");
     // the closed drawer renders the same stepper, so scope to the page content
     await expect(page.locator("#main-content").getByText("Maximum of 10 per item.")).toBeVisible();
   });
@@ -121,12 +126,37 @@ test.describe("keyboard and accessibility", () => {
     await expect(cartButton(page)).toBeFocused();
   });
 
+  test("keyboard focus follows the control that replaces the one pressed", async ({ page }) => {
+    await ready(page);
+    await addToCart(page, 1).focus();
+    await page.keyboard.press("Enter");
+    const plus = page.getByRole("button", { name: "Increase quantity of Product 1" });
+    await expect(plus).toBeFocused();
+    await page.keyboard.press("Shift+Tab"); // to −
+    await page.keyboard.press("Enter");
+    await expect(addToCart(page, 1)).toBeFocused();
+  });
+
   test("drawer traps focus while open", async ({ page }) => {
     await ready(page);
+    await addToCart(page, 1).click(); // a line in the drawer, so it has more than one control
     await cartButton(page).click();
-    for (let i = 0; i < 6; i++) await page.keyboard.press("Tab");
-    const inside = await page.evaluate(() => !!document.activeElement?.closest("dialog"));
-    expect(inside).toBe(true);
+    // A native modal dialog makes the page behind it inert. Tab past the last control goes to the
+    // browser's own UI (reported as <body>), then wraps back into the dialog; it never reaches the
+    // page. So check every stop over two full cycles, not where focus happens to be after N tabs.
+    const stops: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("Tab");
+      stops.push(
+        await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el || el === document.body) return "browser";
+          return el.closest("dialog") ? "dialog" : `page: ${el.outerHTML.slice(0, 80)}`;
+        }),
+      );
+    }
+    expect(stops.filter((s) => s.startsWith("page"))).toEqual([]);
+    expect(stops).toContain("dialog");
   });
 
   const wcag = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];

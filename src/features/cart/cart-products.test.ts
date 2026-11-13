@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCartProduct, parseIds, toCartProduct } from "./cart-products";
+import { isCartProduct, lineTitle, parseIds, toCartProduct } from "./cart-products";
 import { MAX_LINES } from "./persistence";
 
 describe("parseIds", () => {
@@ -43,5 +43,22 @@ describe("cart product shape", () => {
     expect(isCartProduct({ ...p, id: "1" })).toBe(false);
     expect(isCartProduct(null)).toBe(false);
     expect(isCartProduct({ id: 1 })).toBe(false);
+  });
+});
+
+describe("lineTitle", () => {
+  const byId = { 1: { id: 1, title: "Backpack", price: 100, image: "https://x/y.png" } };
+
+  it("uses the product's title when it is known", () => {
+    expect(lineTitle(1, byId, {})).toBe("Backpack");
+  });
+  it("says so when the product no longer exists", () => {
+    expect(lineTitle(7, byId, { 7: true })).toBe("Unavailable item #7");
+  });
+  it("shows a loading placeholder while details are on their way", () => {
+    expect(lineTitle(2, byId, {})).toBe("Loading…");
+  });
+  it("prefers the real title even if an id was once marked unavailable", () => {
+    expect(lineTitle(1, byId, { 1: true })).toBe("Backpack");
   });
 });

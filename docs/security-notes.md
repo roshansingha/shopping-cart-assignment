@@ -1,119 +1,224 @@
 # Security notes
 
+How the app is protected, what the dependency audit found, and what was deliberately accepted.
+
+## Summary
+
+- **All outside data is treated as untrusted.** The product API, URL parameters, saved cart data
+  and the cart lookup route are all checked before use.
+- **There is no way to inject HTML.** API text is only ever shown as plain text, and the source
+  has no `dangerouslySetInnerHTML`, `eval`, `innerHTML` or similar.
+- **Every response carries security headers,** including a Content Security Policy (CSP).
+- **Dependency audit (2026-11-13):** production dependencies are clean. One moderate finding in
+  development tooling was accepted, with reasons (below).
+- **One known weakness, chosen on purpose:** the CSP allows inline scripts. The stricter options
+  either force every page to render dynamically or broke the app (below).
+- **Not done:** no rate limiting, no CSP reporting, no outside security scan.
+
 ## Scope and threat model
 
-What this app handles: a read-only product list from a third-party API, and a shopping cart kept in the browser's localStorage. There are **no accounts, no personal data, no payments and no secrets**. That shapes the priorities:
+The app shows a read-only product list from a third-party API and keeps a shopping cart in the
+browser's localStorage. There are **no accounts, no personal data, no payments and no secrets**.
+That shapes the priorities:
 
-- The main risk is **untrusted input**: the third-party API, URL parameters, and localStorage (which any script on the page, or the user, can edit).
-- The worst realistic outcome of a bug is script injection (XSS) or a corrupted cart, not data theft.
-- If checkout or login is ever added, this threat model must be redone. In particular a server must recompute totals from product ids and quantities and never trust anything the browser sends.
+- The main risk is **untrusted input**: the third-party API, URL parameters, and localStorage
+  (which any script on the page, or the user, can edit).
+- The worst realistic outcome of a bug is script injection (XSS) or a corrupted cart, not theft
+  of data.
+- If checkout or login is ever added, this must be redone. A server would then have to recompute
+  totals from product ids and quantities, and never trust anything sent by the browser.
 
-## Controls
+## How each source of untrusted data is handled
 
-| Untrusted source                                     | Control                                                                                                                                                                                                                                                     | Verified by                                                                                                                      |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Product API response**                             | Parsed with Zod. Wrong shapes, negative or non-finite prices, out-of-range ratings, and image URLs that are not `https` are rejected. **One bad product rejects the whole list**, so a half-trusted payload is never rendered. Unknown fields are stripped. | `schema.test.ts` (22 cases incl. `javascript:`, `data:`, `file:`, protocol-relative URLs)                                        |
-| **API text in the page**                             | Rendered only as React text. The code contains no `dangerouslySetInnerHTML`, `innerHTML`, `eval`, `new Function` or `document.write` (searched the whole source).                                                                                           | Integration test feeds a product titled `<img onerror=…><script>…` and checks it appears as literal text and creates no element. |
-| **Product images**                                   | `next/image` only optimizes the exact host, path, no port, no query string (`fakestoreapi.com/img/**`), so the optimizer is not an open proxy. SVG is not enabled. I checked all 20 real products match this pattern.                                       | Build and E2E; real API checked by hand.                                                                                         |
-| **URL parameters** (`q`, `category`, `sort`, `page`) | Allow-listed or clamped; invalid values fall back to defaults; `q` is trimmed and capped at 100 characters.                                                                                                                                                 | `query.test.ts`, a hostile-parameter integration test                                                                            |
-| **localStorage cart**                                | Validated on every load. Anything malformed, with a quantity over the cap, or with more than 100 lines is discarded and the cart starts empty. Never half-trusted.                                                                                          | 25 validator tests + store tests                                                                                                 |
-| **`/api/cart-products?ids=`**                        | Only positive integers, no duplicates, at most 100. Bad input gets 400; an upstream failure gets a generic 502 with no internal detail. Returns only four fields per product.                                                                               | `cart-products.test.ts`, `route.test.ts`                                                                                         |
-| **Outbound request URL**                             | The upstream URL is fixed in code; `PRODUCTS_API_URL` is a server-side env var only used for tests. No user input ever forms a URL we fetch, so no SSRF path.                                                                                               | Code search                                                                                                                      |
-| **Secrets**                                          | None exist. `.env*` is git-ignored, no `.env` file is present, and a scan for key/token/password patterns found only a test string.                                                                                                                         | Scan                                                                                                                             |
+### The product API response
+
+- It is parsed with Zod. Wrong shapes, negative or infinite prices, out-of-range ratings, and
+  image URLs that are not `https` are rejected.
+- **One bad product rejects the whole list,** so a half-trusted payload is never shown. Unknown
+  fields are dropped.
+- **Proof:** `schema.test.ts` (22 cases, including `javascript:`, `data:`, `file:` and
+  protocol-relative URLs).
+
+### API text shown in the page
+
+- It is rendered only as plain text. A product titled `<img onerror=…><script>…` appears as that
+  literal text and creates no element.
+- **Proof:** an integration test with exactly that title. The whole source was also searched for
+  `dangerouslySetInnerHTML`, `innerHTML`, `eval`, `new Function` and `document.write`. The only
+  hit was a code comment.
+
+### Product images
+
+- `next/image` only optimises the exact host, path, no port and no query string
+  (`fakestoreapi.com/img/**`), so the optimiser cannot be used as an open proxy. SVG is not
+  enabled.
+- I checked that all 20 real product images match this pattern before tightening it.
+
+### URL parameters (`q`, `category`, `sort`, `page`)
+
+- Each is allow-listed or clamped. Invalid values fall back to defaults. The search term is
+  trimmed and capped at 100 characters.
+- **Proof:** `query.test.ts` and a hostile-parameter integration test.
+
+### The saved cart in localStorage
+
+- It is validated on every load. Anything malformed, with a quantity over the limit, or with more
+  than 100 lines is discarded and the cart starts empty. It is never half-trusted.
+- **Proof:** 25 validator tests and the store's corrupted-storage tests.
+
+### The cart lookup route (`/api/cart-products?ids=`)
+
+- Only positive whole numbers are accepted, with no duplicates and at most 100 of them.
+- Bad input gets a 400. An unexpected failure gets a generic 502 with no internal detail.
+- It returns only four fields per product.
+- **Proof:** `cart-products.test.ts` and `route.test.ts`.
+
+### Outbound requests and secrets
+
+- The upstream address is fixed in code. `PRODUCTS_API_URL` is a server-side setting used only
+  for tests. No user input ever forms a URL we fetch, so there is no server-side request forgery
+  path.
+- There are **no secrets** in the project. `.env*` files are git-ignored and none exist. A scan
+  for key, token and password patterns found only a test string.
 
 ## Security headers and CSP
 
-Set in [src/shared/security-headers.ts](../src/shared/security-headers.ts) and applied to every route, including the API.
+Set in [src/shared/security-headers.ts](../src/shared/security-headers.ts) and applied to every
+route, including the API.
 
-| Header                       | Value / purpose                                                                                                                                                                                                         |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Content-Security-Policy`    | `default-src 'self'`; scripts from our origin only; `object-src 'none'`; `base-uri 'self'`; `form-action 'self'`; `frame-ancestors 'none'`; images, fonts and fetches same-origin only. No `unsafe-eval` in production. |
-| `Strict-Transport-Security`  | Two years, `includeSubDomains`. `preload` deliberately omitted: it is a public commitment that is hard to undo.                                                                                                         |
-| `X-Content-Type-Options`     | `nosniff`                                                                                                                                                                                                               |
-| `X-Frame-Options`            | `DENY` (older browsers; CSP covers the rest)                                                                                                                                                                            |
-| `Referrer-Policy`            | `strict-origin-when-cross-origin`                                                                                                                                                                                       |
-| `Permissions-Policy`         | camera, microphone, geolocation, payment, USB, motion sensors all off                                                                                                                                                   |
-| `Cross-Origin-Opener-Policy` | `same-origin`                                                                                                                                                                                                           |
-| `X-Powered-By`               | Removed                                                                                                                                                                                                                 |
+- **Content-Security-Policy:** scripts, images, fonts and requests from our own origin only.
+  Plugins, `<base>` changes, form posts to other sites and framing are all blocked. No
+  `unsafe-eval` in production.
+- **Strict-Transport-Security:** two years. `preload` is left out on purpose, because it is a
+  public commitment that is hard to undo.
+- **X-Content-Type-Options:** `nosniff`.
+- **X-Frame-Options:** `DENY` (for older browsers; the CSP covers the rest).
+- **Referrer-Policy:** `strict-origin-when-cross-origin`.
+- **Permissions-Policy:** camera, microphone, location, payment, USB and motion sensors all off.
+- **Cross-Origin-Opener-Policy:** `same-origin`.
+- **X-Powered-By:** removed.
 
-### The CSP decision, and the weakness I accepted
+### The weakness we accepted
 
-**The policy allows `'unsafe-inline'` for scripts.** That is the weakest part of this setup: if an attacker found a way to inject an inline `<script>`, the CSP would not stop it. I tried to avoid it and could not:
+**The policy allows `'unsafe-inline'` for scripts.** That is the weakest part. If an attacker
+found a way to inject an inline `<script>`, the CSP would not stop it. I tried to avoid it and
+could not:
 
-1. **Nonces** (the usual strict approach) force every page to render dynamically and are incompatible with Partial Prerendering, per the Next.js docs. That would undo the performance work (static shell, CDN-cacheable pages) for an app with nothing sensitive to protect.
-2. **Experimental hash-based SRI**, which is meant to allow a strict policy while keeping static rendering. I built it with inline scripts disallowed and ran the full test suite: **16 of 21 tests failed.** The server-rendered HTML still appeared, but the browser refused Next's inline bootstrap script ("Executing inline script violates … script-src 'self'"), so the page never became interactive and every "Add to cart" button stayed disabled. The hashes did not cover those inline scripts in this setup (Turbopack, Cache Components). I reverted it.
+1. **Nonces** (the usual strict approach) force every page to render dynamically and do not work
+   with Partial Prerendering, according to the Next.js docs. That would undo the performance work
+   for an app with nothing sensitive to protect.
+2. **Experimental hash-based SRI,** meant to allow a strict policy while keeping static pages. I
+   built it with inline scripts disallowed and ran the tests: **16 of 21 failed.** The page was
+   rendered, but the browser refused Next's own inline start-up script, so it never became
+   interactive and every "Add to cart" button stayed disabled. I reverted it.
 
-**What the CSP still does protect against** (each has an end-to-end test against a real browser):
+**What the CSP still protects against** (each has a browser test):
 
-- Scripts from any other origin are refused.
+- Scripts from any other site are refused.
 - `eval` and `new Function` are blocked.
 - Injected `<style>` elements are refused.
-- Images from other origins are refused (so no tracking pixels or data exfiltration through images).
-- Plugins, `<base>` hijacking, form posts to other sites and framing are all blocked.
+- Images from other sites are refused, so no tracking pixels.
 
-**Compensating controls:** the app has no sink an attacker could use to inject HTML (see Controls), and it stores nothing sensitive, so the practical blast radius of a script injection is a modified cart.
+**Compensating controls:** there is no way to inject HTML (see above), and nothing sensitive is
+stored, so the practical damage from an injected script would be a modified cart.
 
-**When to revisit:** as soon as the app handles accounts, payments or personal data, move to nonces and accept dynamic rendering (the docs' recommendation for sensitive apps), or re-test SRI if it leaves experimental status.
+**When to revisit:** as soon as the app handles accounts, payments or personal data. Then move to
+nonces and accept dynamic rendering, or re-test SRI if it stops being experimental.
 
-**Other CSP choices**
+### Other CSP choices
 
-- `style-src-attr 'unsafe-inline'` is needed because `next/image` writes inline `style` attributes. Inline `<style>` elements stay blocked.
-- Development relaxes the policy (eval for React debugging, websockets for hot reload). A unit test asserts this never reaches production.
-- `upgrade-insecure-requests` is not set; HSTS covers it and it would interfere with local production testing over `http://localhost`.
+- `style-src-attr 'unsafe-inline'` is needed because `next/image` writes inline `style`
+  attributes. Inline `<style>` elements stay blocked.
+- Development relaxes the policy (eval for debugging, websockets for hot reload). A test checks
+  that this never reaches production.
+- A UI library's custom dropdown was ruled out partly because it injects an inline `<style>` that
+  this policy blocks. We use a native `<select>` instead.
 
 ### Two testing traps (kept so nobody repeats them)
 
-Both made my first CSP test pass or fail for the wrong reason:
+Both made my first CSP test give the wrong answer:
 
-- Playwright's `page.evaluate()` runs over the DevTools protocol, which **disables the eval restriction**. My first eval test reported "allowed" even though the policy blocks it.
-- A script appended inside that call also runs _inside_ it. The working test runs the probe from a timer, after the call returns, like real injected code.
+- Playwright's `page.evaluate()` runs over the DevTools protocol, which **switches off the eval
+  restriction.** My first test said `eval` was allowed even though the policy blocks it.
+- A script added inside that call also runs _inside_ it. The working test runs the attempt from a
+  timer, after the call returns, like real injected code.
 
 ## Dependency audit
 
-Run with `pnpm audit` on 2026-11-12.
+Run with `pnpm audit` on 2026-11-13.
 
-| Scope                              | Result                             |
-| ---------------------------------- | ---------------------------------- |
-| Production dependencies (`--prod`) | **No known vulnerabilities**       |
-| All dependencies                   | **1 moderate**, 0 high, 0 critical |
+- **Production dependencies:** no known vulnerabilities.
+- **All dependencies:** 1 moderate, 0 high, 0 critical.
 
-### Finding: `minimatch` denial of service (GHSA-g3hv-75wg-m249), moderate, dev-only
+### The finding: `minimatch` denial of service (moderate, development only)
 
-- **What:** vulnerable `minimatch` versions (≥7.0.0, <11.0.1) can be made to hang on specially crafted glob patterns.
-- **Where:** pulled in only through the lint toolchain (`eslint-config-next` → `typescript-eslint` → `typescript-estree` → `minimatch`), 11 dependency paths. It is not in the production bundle (the `--prod` audit is clean).
+- **What:** `minimatch` versions from 7.0.0 up to (not including) 11.0.1 can be made to hang by a
+  specially crafted glob pattern. Advisory GHSA-g3hv-75wg-m249.
+- **Where:** only through the linting tools (`eslint-config-next`, then `typescript-eslint`, then
+  `typescript-estree`, then `minimatch`), by 11 routes. It is not in the production bundle.
 - **Decision: not acted on, accepted and monitored.**
-  - _Not exploitable here:_ it needs an attacker-controlled glob pattern. The lint tooling only reads patterns from config files the developers write.
-  - _No compatible fix exists:_ the newest `typescript-estree` (8.72.2, already installed) asks for `minimatch ^10.2.2`, which is still in the vulnerable range. Forcing version 11 with a package override would put an unsupported major version into the linter, risking a broken lint setup for a risk that is not reachable.
-  - _Revisit_ when `typescript-eslint` ships a release that depends on a patched `minimatch`.
+  - _Not exploitable here:_ it needs an attacker-controlled glob pattern. The lint tools only
+    read patterns from config files the developers write.
+  - _No compatible fix exists:_ the newest `typescript-estree` (8.72.2, already installed) asks
+    for `minimatch ^10.2.2`, which is still in the vulnerable range. Forcing version 11 with an
+    override would put an unsupported version into the linter, risking a broken lint setup for a
+    risk that cannot be reached.
+  - _Revisit_ when `typescript-eslint` ships a release that uses a patched `minimatch`.
 
-### Policy enforced in CI
+### The policy CI enforces
 
-`.github/workflows/ci.yml` runs `pnpm audit --prod --audit-level=moderate` (any production vulnerability fails the build) and `pnpm audit --audit-level=high` (a high or critical finding anywhere fails it). The accepted moderate dev-only finding does not block, but anything worse will. I confirmed the exit codes locally: 0, 0, and 1 for a moderate-level check over everything.
+`.github/workflows/ci.yml` runs two checks:
 
-### Supply-chain notes
+- `pnpm audit --prod --audit-level=moderate` fails the build on any production vulnerability.
+- `pnpm audit --audit-level=high` fails it on a high or critical finding anywhere.
 
-- `pnpm-lock.yaml` is committed and CI installs with `--frozen-lockfile`, so builds use exactly the audited versions.
-- The workspace config disables install scripts for `sharp` and `unrs-resolver`.
+The accepted moderate finding does not block. Anything worse does.
+
+### Supply chain
+
+- `pnpm-lock.yaml` is committed and CI installs with `--frozen-lockfile`, so builds use exactly
+  the audited versions.
+- The workspace settings disable install scripts for `sharp` and `unrs-resolver`.
+- The runtime dependencies are only `next`, `react`, `react-dom`, `zod` and `zustand`.
+
+## The saved catalogue and the diagnostic route
+
+When the live API refuses us, the app shows a saved copy of the catalogue. Security notes on that:
+
+- **Trust:** the saved copy is committed code, but it goes through the same Zod checks as live
+  data every time, and a test checks each image address against the image allow-list. A bad edit
+  fails in CI, not in production.
+- **Honesty:** when the saved copy is shown, the page says so. It never presents old prices as
+  current.
+- **What it deliberately does not do:** it does not try to get past the API's bot screening, for
+  example by sending a browser-like User-Agent. That would be evading a protection the API owner
+  chose. Degrading gracefully is the right response to being refused.
+- **No disguised bugs:** only expected API failures trigger the fallback. Any other error is
+  raised, so a bug in our code cannot be hidden as an outage. This is tested.
+- **Diagnostic route:** `GET /api/upstream-status` reports whether this server can reach the live
+  API (status, the `server` header and `cf-mitigated`). It never returns the upstream body, is
+  cached for 30 seconds so it cannot be used to hammer the API through us, and shows nothing that
+  anyone requesting the API directly would not see.
 
 ## Verification
 
-- **165 unit and integration tests and 21 end-to-end tests pass**, including 7 browser tests that check the headers are present, that normal use (browse, filter, add to cart, open the drawer, reload) triggers **zero CSP violations**, and that the CSP actually blocks the things listed above.
-- **Mutation check:** I removed each protection in turn: the image scheme restriction, eval allowed in production, framing allowed, images from any origin, `nosniff` dropped, and the id validator loosened. The suite caught all six, with between 1 and 13 failing tests each.
+- **205 unit and integration tests and 21 browser tests pass.** Seven browser tests are about
+  security: the headers are present, normal use causes **zero CSP violations**, and the CSP really
+  blocks the things listed above.
+- **Breaking the protections on purpose:** I removed each one in turn (the image scheme check,
+  eval allowed, framing allowed, images from any site, `nosniff`, the id check). The tests caught
+  all six.
+- **Deployed sites:** the smoke test (`pnpm smoke <url>`) checks the security headers on a live
+  address. It passed on both the Netlify and Vercel deployments.
 
-## Not done (limitations)
+## Not done
 
-- **Nothing was tested on the deployed site.** Headers should be re-checked after deploying to Vercel (`curl -I <url>` or an online header scanner), because a CDN or platform setting can add or override headers.
-- **No CSP reporting endpoint**, so violations in real users' browsers would go unnoticed.
-- **No rate limiting** on `/api/cart-products`. It is cheap (upstream data is cached for an hour, at most 100 ids per call) but unauthenticated, so it relies on the hosting platform's protections.
-- **No automated dynamic scan** (for example OWASP ZAP) and no third-party penetration test.
-- **No HSTS preload** and no Subresource Integrity (see the CSP section).
-- The audit reflects one day's advisory database; new advisories appear over time, which is why the check runs in CI.
-
-## Addendum: the saved catalog (resilience)
-
-- **Trust:** `fallback-products.json` is committed code, but it still goes through the same Zod schema as live data every time it is used, and a test checks every image URL against the optimizer's allow-list. A bad edit fails in CI, not in production.
-- **Honesty to users:** when the fallback is served, the page says so. It does not present old prices as current.
-- **What this deliberately does not do:** it does not try to get past the API's bot screening (for example by sending a browser-like User-Agent). That would be evading a protection the API owner chose; degrading gracefully is the right response to being refused.
-- **Failure masking:** only expected API failures (network, HTTP error, unexpected payload) trigger the fallback. Any other error is rethrown, so a bug in our own code cannot be hidden as an "outage" (tested).
-- **Visibility:** every fallback logs a warning with the reason (for example `http 403`), so an outage shows up in server logs.
-- **Diagnostic endpoint:** `GET /api/upstream-status` reports whether _this_ server can reach the live product API (status, the `server` header, and `cf-mitigated`). It never returns the upstream body, is cached for 30 seconds so it cannot be used to hammer the API through us, and exposes nothing that is not already visible to anyone who requests the API directly. It exists so a blocked deployment can be diagnosed by opening a URL instead of reading host logs. The server log line for a fallback also names the responder (for example `http 403, server=cloudflare cf-mitigated=challenge`).
+- **No check for CSP violations in the browser console on the deployed sites.** The headers were
+  confirmed present, but normal use was only watched for violations locally.
+- **No CSP reporting endpoint,** so violations in real users' browsers would go unnoticed.
+- **No rate limiting** on `/api/cart-products`. It is cheap (upstream data is cached for an hour,
+  and at most 100 ids per call) but unauthenticated, so it relies on the host's protections.
+- **No automated dynamic scan** (for example OWASP ZAP) and no outside penetration test.
+- **No HSTS preload** and no Subresource Integrity.
+- The audit reflects one day's advisory database. New advisories appear over time, which is why
+  the check runs in CI.

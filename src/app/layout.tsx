@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { CartHydrator } from "@/features/cart/components/cart-hydrator";
 import { CartLiveRegion } from "@/features/cart/components/live-region";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/shared/site";
 import { SiteHeader } from "./site-header";
 import "./globals.css";
 
@@ -16,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Shop",
-  description: "Browse and shop products",
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

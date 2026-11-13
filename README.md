@@ -2,8 +2,25 @@
 
 A production-style shopping cart built with Next.js (App Router), TypeScript and Zustand. It lists products from [fakestoreapi.com](https://fakestoreapi.com/products) with filtering, search, sorting and pagination, and has a persistent cart with quantity management, cross-tab sync, and an accessible drawer.
 
-- **Live demo:** _add the Vercel URL here after deploying_
+- **Live demo:** https://fake-store-api-shopping-cart.netlify.app/
+- **Repository:** https://github.com/roshansingha/shopping-cart-assignment
 - **Where the reasoning lives:** this README is the map. The decisions, measurements and trade-offs are in the documents listed under [Documentation](#documentation).
+
+## Where each requirement is met
+
+| Requirement                                      | Code                                                                                                | Reasoning and evidence                                                                                   |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1. Product listing, states, filter, search, sort | [src/features/products/](src/features/products/), [src/app/page.tsx](src/app/page.tsx)              | [Product listing](#product-listing-how-it-scales-to-a-large-catalog) below                               |
+| 1. Large catalogue (pagination, and why)         | [query.ts](src/features/products/query.ts)                                                          | [ADR-002](docs/adr-002-listing-strategy.md)                                                              |
+| 2. Cart, quantities, persistence, edge cases     | [src/features/cart/](src/features/cart/)                                                            | [docs/cart-behavior.md](docs/cart-behavior.md)                                                           |
+| 3. Architecture and state management             | [src/features/](src/features/)                                                                      | [ADR-001](docs/adr-001-state-management.md)                                                              |
+| 4. Performance                                   | [scripts/perf/](scripts/perf/)                                                                      | [docs/performance-notes.md](docs/performance-notes.md)                                                   |
+| 5. Responsive design and accessibility           | [scripts/a11y/](scripts/a11y/), [e2e/shop.spec.ts](e2e/shop.spec.ts)                                | [docs/accessibility-and-responsive.md](docs/accessibility-and-responsive.md)                             |
+| 6. Testing, coverage, the edge case not handled  | `*.test.ts(x)` next to the code, [e2e/](e2e/)                                                       | [docs/testing-strategy.md](docs/testing-strategy.md), [docs/coverage-report.md](docs/coverage-report.md) |
+| 7. Security and dependency audit                 | [security-headers.ts](src/shared/security-headers.ts), [schema.ts](src/features/products/schema.ts) | [docs/security-notes.md](docs/security-notes.md)                                                         |
+| 8. Code review exercise                          | [review/examples/](review/examples/)                                                                | [review/CODE_REVIEW.md](review/CODE_REVIEW.md)                                                           |
+| AI strategy, audit, verification, disagreement   | —                                                                                                   | [developer-log.md](developer-log.md)                                                                     |
+| TypeScript                                       | The whole app, strict mode                                                                          | [TypeScript](#typescript) below                                                                          |
 
 ## Quick start
 
@@ -93,19 +110,22 @@ FakeStore returns only 20 products, so the listing is deliberately built so the 
 - **Fetch once, cache, filter on the server.** `getProducts()` is a `"use cache"` function (1 hour), so every visitor shares one upstream call. Search, category, sort and pagination run on the server per request in pure functions (`features/products/query.ts`). The client receives only the current page (8 cards), not the whole catalog.
 - **State lives in the URL** (`?q=&category=&sort=&page=`). Params are untrusted: invalid values fall back to defaults and out-of-range pages clamp.
 - **Pagination over infinite scroll.** Pages are plain links: they work without JavaScript, keep the DOM small, give stable URLs, and keep the footer reachable. Infinite scroll would grow the DOM without bound and hurt keyboard and screen-reader use.
-- **Search is debounced** (300 ms) before it touches the URL, so typing does not trigger a request per keystroke.
+- **Search is debounced** (300 ms) before it touches the URL, so typing does not trigger a request per keystroke. The box follows the URL when something else changes it ("Clear filters", Back, a shared link), but never overwrites what the user is still typing.
 - **What would change with a real backend:** the whole-catalog cache would stop making sense. `queryProducts` would become a call that passes `q`, `category`, `sort` and `page` to the API (server-side filtering and cursor or offset pagination), cached per query. The URL contract and UI stay the same. Revisit ADR-001 then (TanStack Query for client-side server state).
 - **The browser never receives the whole catalog.** Only the current page is rendered, and the cart drawer fetches just its own lines on demand. (An earlier version leaked the full list through the header; see finding 1 in [docs/performance-notes.md](docs/performance-notes.md).)
-- **Not measured:** the cost of in-memory search and sort at 1,000+ products. At that size it is almost certainly milliseconds, but I have not benchmarked it.
+- **Measured, not guessed:** filtering in memory is cheap (slowest query 0.3 ms at 1,000 products, 2.7 ms at 10,000, 37 ms at 100,000, on a laptop with synthetic data). The real limit is the size of the catalogue that must be downloaded and cached (4 MB at 10,000 products). **[docs/adr-002-listing-strategy.md](docs/adr-002-listing-strategy.md) says which approach to use in which scenario**, from this one up to API-side paging, a search index and virtualization.
 - **If the live API is unreachable, the saved catalog is served.** A committed copy of the 20 products (`fallback-products.json`, validated by the same schema) is used when the API is blocked, down, or returns something unexpected, with a visible notice that prices may be out of date. It is cached for minutes, not hours, so live data returns quickly after an outage. This exists because a real deploy failed: Netlify's build servers got a `403` from fakestoreapi.com (it sits behind Cloudflare), and because the listing is prerendered, one refused request failed the whole build.
-- **Loading, empty and error states:** skeleton grid inside `<Suspense>`, an empty state with a "Clear filters" link, and `error.tsx` with a retry button.
+- **Loading, empty and error states:** a skeleton grid inside `<Suspense>` while loading, and an empty state with a "Clear filters" link. **The main error state is the saved-catalogue notice:** if the product API fails (down, refusing us, or sending bad data), the page shows the saved catalogue under a visible "Live product data is unavailable" message instead of an error page. This is what the deployed site shows today. `error.tsx`, with a retry button, is only for unexpected bugs, which are deliberately not hidden behind the fallback. The cart drawer has its own error state: "prices are unavailable", with Try again.
 
 ## Cart: edge cases and decisions
+
+Each feature and every scenario, explained one by one: [docs/cart-behavior.md](docs/cart-behavior.md).
+The table below is the short version.
 
 | Case                                      | Decision                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Rapid clicks                              | Store updates are synchronous functional updates (`set(s => ...)`), so no click is lost. Buttons are not debounced; the cap makes extra clicks harmless.                                                                                                                                                                                          |
-| Stock                                     | The API has no stock field. A simulated cap of `MAX_QUANTITY = 10` per line is enforced in pure cart logic. At the cap the `+` button is disabled, a visible message appears, and a live region announces it.                                                                                                                                     |
+| Stock                                     | The API has no stock field. A simulated cap of `MAX_QUANTITY = 10` per line is enforced in pure cart logic. At the cap the `+` button is `aria-disabled` (so keyboard focus is not dropped), a visible message appears, and a live region announces it.                                                                                           |
 | Stale tabs                                | A `storage` event listener (`CartHydrator`) rehydrates the store when another tab writes or clears the cart.                                                                                                                                                                                                                                      |
 | Corrupted or tampered storage             | Rehydrate validates with a small hand-written validator (`parseStoredCart`; Zod would add ~14 kB of client JS for four checks, see `docs/performance-notes.md`). A cart over 100 lines is rejected too. Wrong shape, bad JSON, negative or over-cap quantities, or a version mismatch all fall back to an empty cart. Duplicate lines are merged. |
 | Storage unavailable (private mode, quota) | `safeLocalStorage` swallows errors; the cart keeps working in memory for that tab.                                                                                                                                                                                                                                                                |
@@ -122,8 +142,9 @@ The cart drawer is a native `<dialog>` opened with `showModal()`, which gives th
 
 - **Mobile-first grid:** 2 columns by default, 3 from `sm`, 4 from `lg`. The cart drawer is full width on phones and capped at `max-w-md` above that.
 - **Landmarks:** a skip link (first focusable element), `header`, a single `main#main-content`, and a `search` form. Pagination is a labelled `nav`. Headings run `h1` (Products), then one `h2` per product card.
-- **Focus:** a global 3px `:focus-visible` ring (blue, lighter in dark mode). Both pass 3:1 against their backgrounds.
-- **Drawer:** a native `<dialog>` opened with `showModal()`. The browser supplies the focus trap, Escape to close, an inert background and focus return to the Cart button. Page scroll is locked with `body:has(dialog[open])`.
+- **Focus:** buttons and links get a global 3px `:focus-visible` ring (blue, lighter in dark mode, both above 3:1). The search box and dropdowns use a neutral 2px edge instead (17.9:1 on a white field, 15.1:1 on a dark one) so it reads as part of the field rather than a second border.
+- **Drawer:** a native `<dialog>` opened with `showModal()`. The browser supplies Escape to close, an inert background (Tab never reaches the page) and focus return to the Cart button.
+- **Focus is never dropped:** when Add to cart and the stepper swap places, or a drawer line is removed, focus moves to the control that replaced the pressed one. Page scroll is locked with `body:has(dialog[open])`.
 - **Announcements:** one `aria-live="polite"` region announces cart changes ("X added. Quantity 2", "maximum of 10 reached", "X removed"). The result count (`role="status"`) announces filter results.
 - **Why little ARIA:** native elements already carry the semantics: `<button>`, `<dialog>`, `<select>`, `<label>`, `<nav>`, `<ul>`. ARIA is used only where they fall short: labels that include the product name on repeated buttons ("Add to cart: Backpack" keeps the visible text inside the accessible name), the live region, `aria-haspopup="dialog"` on the trigger, and a visually hidden "out of 5 stars" on ratings.
 - **Other:** skeleton pulse respects `prefers-reduced-motion`; quantity buttons are 40px; product images use `alt=""` because the title is adjacent text.
@@ -143,9 +164,12 @@ The cart drawer is a native `<dialog>` opened with `showModal()`, which gives th
 
 ## Testing
 
+The reasoning behind these layers and thresholds is in [docs/testing-strategy.md](docs/testing-strategy.md).
+
 ```bash
-pnpm test       # Vitest: unit + integration (187 passing, plus 5 intentional expected-failures, ~6s)
-pnpm coverage   # same, with coverage thresholds enforced (about 96% overall)
+pnpm test       # Vitest: unit + integration (205 passing, plus 5 intentional expected-failures, ~6s)
+pnpm coverage   # same, with coverage thresholds enforced
+pnpm coverage:report   # also writes the committed report, docs/coverage-report.md (about 96% overall)
 pnpm e2e        # Playwright (Chromium): builds the app and runs 21 browser tests
 ```
 
@@ -204,21 +228,26 @@ Full threat model, controls, the CSP trade-off and the dependency audit: [docs/s
 
 ## Code review exercise
 
-[review/CODE_REVIEW.md](review/CODE_REVIEW.md) reviews a deliberately flawed `CartSummary` component in pull-request voice: an XSS hole, index keys with uncontrolled inputs, a fetch race, derived state in an effect, and a single context value. A refactor built on this app's own store sits next to it in `review/examples/`, and one shared test spec proves every claim (the original must fail each test; `pnpm vitest run review`). The flawed component was written for the exercise, not taken from a real codebase.
+[review/CODE_REVIEW.md](review/CODE_REVIEW.md) is one pull-request comment on an anti-pattern I have met in production: **derived state kept in an effect** (a cart total stored in `useState` and synced with `useEffect`, which renders a frame of wrong money, renders twice, and goes stale when someone forgets a dependency). The fix computes it during render. Four other defects in the same component (an XSS hole, index keys with an uncontrolled input, a fetch race, and a single context value) are summarised in an appendix. A refactor built on this app's own store sits next to it in `review/examples/`, and one shared test spec proves every claim (the original must fail each test; `pnpm vitest run review`). The flawed component was written for the exercise, not taken from a real codebase.
 
 ## Continuous integration and deployment
 
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push to `main` and on pull requests. One job runs the dependency audit, lint, typecheck, format check and the coverage run (which fails below the thresholds); a second runs the Playwright suite.
-- **Deployment:** Netlify (or Vercel), with no environment variables needed (the product API URL is fixed in code). Do not set `PRODUCTS_API_URL`: it is only for local mocks. After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and has already passed 11 of 11 checks against a local production build using the real API.
+- **Deployment:** Netlify (or Vercel), with no environment variables needed (the product API URL is fixed in code). Do not set `PRODUCTS_API_URL`: it is only for local mocks. After deploying, run `pnpm smoke https://<your-deployment>`. It checks the listing, pagination, filters, the cart lookup route, image loading, the security headers and 404 handling over plain HTTP, and passes 12 of 12 checks against the live site (https://fake-store-api-shopping-cart.netlify.app/).
 - **Diagnosing a deployment:** open `/api/upstream-status` on the deployed site. It says whether the live product API is reachable from that host and who refused it if not. `pnpm smoke <url>` prints the same result as an informational line.
-- **Known external risk, now handled:** `fakestoreapi.com` refused Netlify's build servers with a `403`. The saved-catalog fallback keeps the build and the site working. **Not yet confirmed:** whether product _images_ (also served by fakestoreapi.com, through the host's image optimizer) load on the deployed site; check this after redeploying.
+- **On the deployed site, the live product API is blocked, so the saved catalog is served.** `fakestoreapi.com` sits behind Cloudflare, which refuses the host's requests (`/api/upstream-status` reports `HTTP 403, server=cloudflare, cf-mitigated=challenge`). The committed, schema-validated `fallback-products.json` is used instead, with a visible notice on the page, and the site works normally: listing, filters, cart and checks all pass. Product images still load through the host's image optimizer. We deliberately do not disguise the requests to get past Cloudflare's bot check.
 
 ## Documentation
 
-| Document                                                             | What it is                                                                 |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [docs/adr-001-state-management.md](docs/adr-001-state-management.md) | Options considered for state, the decision, and two later amendments       |
-| [docs/performance-notes.md](docs/performance-notes.md)               | What I measured, what I changed, before and after numbers, and my mistakes |
-| [docs/security-notes.md](docs/security-notes.md)                     | Threat model, controls, the CSP trade-off, and the dependency audit        |
-| [review/CODE_REVIEW.md](review/CODE_REVIEW.md)                       | The code review exercise                                                   |
-| [developer-log.md](developer-log.md)                                 | How AI was used: strategy, audit, verification, and disagreement           |
+| Document                                                                     | What it is                                                                                              |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [docs/adr-001-state-management.md](docs/adr-001-state-management.md)         | State options and trade-offs, the decision, and how the code is structured to scale to a team           |
+| [docs/accessibility-and-responsive.md](docs/accessibility-and-responsive.md) | Responsive and accessibility strategy, point by point, with evidence and trade-offs                     |
+| [docs/coverage-report.md](docs/coverage-report.md)                           | The coverage report, file by file, with the thresholds and how to read the low numbers                  |
+| [docs/testing-strategy.md](docs/testing-strategy.md)                         | The testing strategy: what each layer proves, thresholds and why, and how we checked the tests can fail |
+| [docs/cart-behavior.md](docs/cart-behavior.md)                               | Every cart feature, and how rapid clicks, stale tabs, stock limits and bad saved data are handled       |
+| [docs/adr-002-listing-strategy.md](docs/adr-002-listing-strategy.md)         | What to use for the listing as the catalogue grows, scenario by scenario, with measurements             |
+| [docs/performance-notes.md](docs/performance-notes.md)                       | What I measured, what I changed, before and after numbers, and my mistakes                              |
+| [docs/security-notes.md](docs/security-notes.md)                             | Threat model, controls, the CSP trade-off, and the dependency audit                                     |
+| [review/CODE_REVIEW.md](review/CODE_REVIEW.md)                               | The code review exercise                                                                                |
+| [developer-log.md](developer-log.md)                                         | How AI was used: strategy, audit, verification, and disagreement                                        |

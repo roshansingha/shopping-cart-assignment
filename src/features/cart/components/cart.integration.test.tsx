@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -84,9 +84,39 @@ describe("cart interactions", () => {
     await user.click(screen.getByRole("button", { name: "Add to cart: Product 1" }));
     const plus = screen.getByRole("button", { name: "Increase quantity of Product 1" });
     for (let i = 1; i < MAX_QUANTITY; i++) await user.click(plus);
-    expect(plus).toBeDisabled();
+    expect(plus).toHaveAttribute("aria-disabled", "true");
+    expect(plus).toHaveAccessibleDescription(`Maximum of ${MAX_QUANTITY} per item.`);
+    await user.click(plus); // pressing it at the cap changes nothing
+    expect(useCartStore.getState().lines).toEqual([{ productId: 1, quantity: MAX_QUANTITY }]);
     expect(screen.getAllByText(`Maximum of ${MAX_QUANTITY} per item.`).length).toBeGreaterThan(0);
     expect(screen.getByText(`Product 1: maximum of ${MAX_QUANTITY} reached.`)).toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus on the control that replaces the one pressed", async () => {
+    const user = setup();
+    await user.click(screen.getByRole("button", { name: "Add to cart: Product 1" }));
+    const plus = screen.getByRole("button", { name: "Increase quantity of Product 1" });
+    expect(plus).toHaveFocus(); // Add unmounted; focus did not fall to <body>
+    await user.click(screen.getByRole("button", { name: "Decrease quantity of Product 1" }));
+    expect(screen.getByRole("button", { name: "Add to cart: Product 1" })).toHaveFocus();
+  });
+
+  it("keeps focus on + when it reaches the cap", async () => {
+    const user = setup();
+    await user.click(screen.getByRole("button", { name: "Add to cart: Product 1" }));
+    const plus = screen.getByRole("button", { name: "Increase quantity of Product 1" });
+    for (let i = 1; i < MAX_QUANTITY; i++) await user.click(plus);
+    expect(plus).toHaveFocus();
+  });
+
+  it("does not move focus when the cart changes from elsewhere (another tab)", () => {
+    setup();
+    const search = document.body.appendChild(document.createElement("input"));
+    search.focus();
+    act(() => useCartStore.setState({ lines: [{ productId: 1, quantity: 1 }] }));
+    act(() => useCartStore.setState({ lines: [] }));
+    expect(search).toHaveFocus();
+    search.remove();
   });
 
   it("announces changes in the live region", async () => {
@@ -131,6 +161,51 @@ describe("cart drawer", () => {
     await user.click(within(dialog).getByRole("button", { name: "Remove Product 1 from cart" }));
     expect(within(dialog).getByText("Your cart is empty.")).toBeInTheDocument();
     expect(within(dialog).getByText("$0.00")).toBeInTheDocument();
+  });
+
+  it("moves focus to the next line's Remove button, then Close, as lines are removed", async () => {
+    useCartStore.setState({
+      lines: [
+        { productId: 1, quantity: 1 },
+        { productId: 2, quantity: 1 },
+      ],
+    });
+    const user = setup();
+    await openCart(user);
+    const dialog = cartDialog();
+    await waitFor(() => expect(within(dialog).queryByText("Loading…")).not.toBeInTheDocument());
+    const removeButton = (n: number) =>
+      within(dialog).getByRole("button", { name: `Remove Product ${n} from cart`, hidden: true });
+
+    await user.click(removeButton(1));
+    expect(removeButton(2)).toHaveFocus(); // the line that moved up into its place
+
+    // − at quantity 1 removes the line too; the cart is now empty, so focus goes to Close
+    await user.click(
+      within(dialog).getByRole("button", { name: "Decrease quantity of Product 2", hidden: true }),
+    );
+    expect(within(dialog).getByRole("button", { name: "Close", hidden: true })).toHaveFocus();
+  });
+
+  it("keeps focus at the same position in a longer list, and moves up from the end", async () => {
+    useCartStore.setState({
+      lines: [
+        { productId: 1, quantity: 1 },
+        { productId: 2, quantity: 1 },
+        { productId: 3, quantity: 1 },
+      ],
+    });
+    const user = setup();
+    await openCart(user);
+    const dialog = cartDialog();
+    await waitFor(() => expect(within(dialog).queryByText("Loading…")).not.toBeInTheDocument());
+    const removeButton = (n: number) =>
+      within(dialog).getByRole("button", { name: `Remove Product ${n} from cart`, hidden: true });
+
+    await user.click(removeButton(2)); // the middle line
+    expect(removeButton(3)).toHaveFocus(); // same position, not the top of the list
+    await user.click(removeButton(3)); // now the last line
+    expect(removeButton(1)).toHaveFocus(); // the line above
   });
 
   it("looks up only the products in the cart, and only once the drawer opens", async () => {

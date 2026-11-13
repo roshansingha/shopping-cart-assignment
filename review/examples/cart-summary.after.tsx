@@ -5,34 +5,23 @@
  * (ADR-001): one Zustand cart store with selector subscriptions, and the on-demand product
  * lookup that already handles de-duplication, merging and errors.
  */
-import { useEffect } from "react";
 import { QuantityStepper } from "@/features/cart/components/quantity-stepper";
-import { itemCount, totalCents } from "@/features/cart/logic";
-import { useProductDetails } from "@/features/cart/product-details";
+import { lineTitle } from "@/features/cart/cart-products";
+import { itemCount } from "@/features/cart/logic";
 import { useCartStore } from "@/features/cart/store";
+import { useCartProducts } from "@/features/cart/use-cart-products";
 import { formatCents } from "@/shared/money";
 
 export function CartSummary() {
-  const lines = useCartStore((s) => s.lines);
   const remove = useCartStore((s) => s.remove);
-  const byId = useProductDetails((s) => s.byId);
-  const load = useProductDetails((s) => s.load);
-
-  // Effect only for what must be synchronised with the outside world: fetching.
-  const idsKey = lines.map((l) => l.productId).join(",");
-  useEffect(() => {
-    void load(idsKey ? idsKey.split(",").map(Number) : []);
-  }, [idsKey, load]);
-
-  // Everything else is derived while rendering: no extra state, no extra commits.
-  const prices = new Map(Object.values(byId).map((p) => [p.id, p.price]));
-  const settled = lines.every((l) => byId[l.productId]);
+  // The fetching effect and every derived value live in one shared, tested hook.
+  const { lines, byId, unavailable, total } = useCartProducts();
 
   return (
     <section aria-label="Cart summary">
       <ul>
         {lines.map((l) => {
-          const title = byId[l.productId]?.title ?? "Loading…";
+          const title = lineTitle(l.productId, byId, unavailable);
           return (
             <li key={l.productId}>
               {/* React escapes text: API data can never become markup */}
@@ -45,7 +34,7 @@ export function CartSummary() {
           );
         })}
       </ul>
-      <p>Total: {settled ? formatCents(totalCents(lines, prices)) : "—"}</p>
+      <p>Total: {total === null ? "—" : formatCents(total)}</p>
     </section>
   );
 }

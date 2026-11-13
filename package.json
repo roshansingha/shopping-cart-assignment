@@ -14,7 +14,10 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "bench": "node --no-warnings scripts/bench/query.mjs",
+    "a11y:widths": "node scripts/a11y/responsive-check.mjs",
+    "coverage:report": "node scripts/coverage-report.mjs"
   },
   "dependencies": {
     "next": "16.4.6",
